@@ -62,20 +62,26 @@ export const storageService = {
     this.notifySync();
   },
 
+  // Active Session User ID stored in sessionStorage so closing/exiting the browser forces re-login
   getActiveUserId() {
-    return localStorage.getItem(KEYS.CURRENT_USER_ID) || null;
+    if (typeof window === 'undefined') return null;
+    // Clear old legacy persistent session if present
+    localStorage.removeItem(KEYS.CURRENT_USER_ID);
+    return sessionStorage.getItem(KEYS.CURRENT_USER_ID) || null;
   },
 
   setActiveUserId(id) {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(KEYS.CURRENT_USER_ID);
     if (id) {
-      localStorage.setItem(KEYS.CURRENT_USER_ID, id);
+      sessionStorage.setItem(KEYS.CURRENT_USER_ID, id);
     } else {
-      localStorage.removeItem(KEYS.CURRENT_USER_ID);
+      sessionStorage.removeItem(KEYS.CURRENT_USER_ID);
     }
     this.notifySync();
   },
   
-  // Real Universal Multi-Device Login Method (Queries Supabase Cloud + Local Cache)
+  // Real Universal Multi-Device Login Method
   async loginUser(identifier, password) {
     const cleanId = (identifier || '').trim().toLowerCase();
     let users = this.getUsers();
@@ -91,15 +97,14 @@ export const storageService = {
       return idMatch && passMatch;
     });
 
-    // 2. If not found in local cache, query Supabase Cloud Database directly!
+    // 2. Query Supabase Cloud Database directly
     if (!matchedUser && isSupabaseConfigured && supabase) {
       try {
-        const { data: cloudUsers, error } = await supabase
+        const { data: cloudUsers } = await supabase
           .from('users')
           .select('*');
 
         if (cloudUsers && cloudUsers.length > 0) {
-          // Normalize Supabase DB records to local format
           const formattedUsers = cloudUsers.map(u => ({
             id: u.id,
             email: u.email,
@@ -117,7 +122,6 @@ export const storageService = {
             badges: u.badges || ["PeerNexus Member"]
           }));
 
-          // Update local cache with Supabase data
           this.saveUsers(formattedUsers);
           users = formattedUsers;
 
@@ -136,19 +140,18 @@ export const storageService = {
     }
 
     if (!matchedUser) {
-      throw new Error('Invalid Student/Teacher Email, Unique ID or Password. If you created this account on another device, ensure internet access or click Sign Up!');
+      throw new Error('Invalid Student/Teacher Email, Unique ID or Password. Please check your credentials!');
     }
 
     this.setActiveUserId(matchedUser.id);
     return matchedUser;
   },
 
-  // Real Multi-Device Registration Method (Inserts into Supabase Cloud + Local Cache)
+  // Real Multi-Device Registration Method
   async registerUser(userData) {
     let users = this.getUsers();
     const cleanEmail = (userData.email || '').trim().toLowerCase();
 
-    // Check local duplicate
     const existingLocal = users.find(u => (u.email || '').toLowerCase() === cleanEmail);
     if (existingLocal) {
       throw new Error('An account with this email address already exists. Please log in instead!');
@@ -173,12 +176,10 @@ export const storageService = {
       badges: ["PeerNexus Member"]
     };
 
-    // 1. Save to local storage
     users.push(newUser);
     this.saveUsers(users);
     this.setActiveUserId(newUser.id);
 
-    // 2. Insert into Supabase Cloud Database for cross-device availability
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('users').upsert({
@@ -344,6 +345,9 @@ export const storageService = {
     localStorage.removeItem(KEYS.TRADES);
     localStorage.removeItem(KEYS.MESSAGES);
     localStorage.removeItem(KEYS.CURRENT_USER_ID);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(KEYS.CURRENT_USER_ID);
+    }
     this.notifySync();
   },
 
