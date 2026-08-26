@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Video, 
   Mic, 
@@ -28,12 +28,22 @@ export default function ActiveSessionRoomModal({
   const [notesText, setNotesText] = useState(`// Peer Session Notes & Code Scratchpad\n// Topic: ${trade?.skillOffered || 'Skill Barter'}\n\nfunction calculateMatrix() {\n  console.log("Collaborative code editing during mentoring...");\n}`);
   const [inputMsg, setInputMsg] = useState('');
   const [mediaError, setMediaError] = useState(null);
+  const [isStreamActive, setIsStreamActive] = useState(false);
 
   const localVideoRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const noteBroadcastRef = useRef(null);
 
   const otherPersonName = trade ? (trade.senderId === currentUser.id ? (trade.receiverName || `Peer (${trade.receiverId})`) : trade.senderName) : '';
+
+  // Callback Ref to reliably attach stream whenever video node mounts in DOM
+  const setLocalVideoNode = useCallback((node) => {
+    localVideoRef.current = node;
+    if (node && mediaStreamRef.current) {
+      node.srcObject = mediaStreamRef.current;
+      node.play().catch(err => console.warn('Video play catch:', err));
+    }
+  }, []);
 
   // Initialize WebRTC Camera & Microphone Stream when Modal Opens
   useEffect(() => {
@@ -44,9 +54,15 @@ export default function ActiveSessionRoomModal({
     async function initMedia() {
       try {
         setMediaError(null);
+        setIsStreamActive(false);
+
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              facingMode: 'user'
+            },
             audio: true
           });
 
@@ -56,13 +72,22 @@ export default function ActiveSessionRoomModal({
           }
 
           mediaStreamRef.current = stream;
+          setIsStreamActive(true);
+
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = stream;
+            localVideoRef.current.play().catch(e => console.warn('Auto play error:', e));
           }
+        } else {
+          setMediaError('Media devices not supported on this browser context.');
         }
       } catch (err) {
         console.warn('WebRTC Media Stream Error:', err);
-        setMediaError('Camera/Mic permission required or device unavailable. Virtual avatar active.');
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          setMediaError('Camera/Mic permission was denied. Please allow camera access in browser settings.');
+        } else {
+          setMediaError('Unable to access camera hardware. Avatar fallback active.');
+        }
       }
     }
 
@@ -91,15 +116,17 @@ export default function ActiveSessionRoomModal({
         noteBroadcastRef.current.close();
         noteBroadcastRef.current = null;
       }
+      setIsStreamActive(false);
     };
   }, [isOpen, trade?.id]);
 
-  // Bind video element whenever stream or tab changes
+  // Ensure video node receives stream whenever activeTab changes back to video
   useEffect(() => {
     if (activeTab === 'video' && localVideoRef.current && mediaStreamRef.current) {
       localVideoRef.current.srcObject = mediaStreamRef.current;
+      localVideoRef.current.play().catch(e => console.warn('Tab switch play error:', e));
     }
-  }, [activeTab, isOpen]);
+  }, [activeTab]);
 
   // Toggle Video Track
   const handleToggleVideo = () => {
@@ -164,7 +191,7 @@ export default function ActiveSessionRoomModal({
     <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full h-[92vh] sm:h-[680px] flex flex-col shadow-2xl overflow-hidden">
         
-        {/* RESPONSIVE MOBILE OPTIMIZED HEADER */}
+        {/* RESPONSIVE HEADER */}
         <div className="p-3 sm:p-4 bg-slate-950 border-b border-slate-800 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           
           <div className="flex items-center gap-2.5 min-w-0 w-full sm:w-auto">
@@ -242,7 +269,7 @@ export default function ActiveSessionRoomModal({
         {/* MAIN BODY */}
         <div className="flex-1 overflow-hidden bg-slate-950/40 p-3 sm:p-4">
           
-          {/* TAB 1: VIDEO CALL ROOM WITH WEBRTC MEDIA STREAM */}
+          {/* TAB 1: VIDEO CALL ROOM */}
           {activeTab === 'video' && (
             <div className="h-full flex flex-col justify-between space-y-3">
               
@@ -255,31 +282,32 @@ export default function ActiveSessionRoomModal({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 flex-1 min-h-0">
                 
-                {/* Local Camera Feed (Live WebRTC Video) */}
+                {/* Local Camera Feed (Always keep <video> mounted in DOM) */}
                 <div className="bg-slate-950 border border-slate-800 rounded-2xl relative overflow-hidden flex items-center justify-center group">
-                  {isVideoOn && !mediaError ? (
-                    <video
-                      ref={localVideoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover rounded-2xl"
-                    />
-                  ) : (
+                  <video
+                    ref={setLocalVideoNode}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{ display: isVideoOn && !mediaError ? 'block' : 'none' }}
+                    className="w-full h-full object-cover rounded-2xl"
+                  />
+
+                  {(!isVideoOn || mediaError) && (
                     <div className="text-center space-y-2 p-4">
                       <img src={currentUser.avatar} alt="" className="h-16 sm:h-20 w-16 sm:w-20 rounded-full mx-auto border-2 border-cyan-500 object-cover shadow-xl" />
                       <div>
                         <div className="text-xs sm:text-sm font-bold text-white">{currentUser.name} (You)</div>
                         <div className="text-[11px] text-amber-400 font-semibold mt-0.5">
-                          {isVideoOn ? 'Camera Offline' : 'Camera Muted'}
+                          {mediaError ? 'Camera Disabled' : 'Camera Muted'}
                         </div>
                       </div>
                     </div>
                   )}
 
                   <div className="absolute bottom-3 left-3 bg-slate-950/90 backdrop-blur-md border border-slate-800 px-2.5 py-1 rounded-lg text-[10px] text-cyan-300 font-mono flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>Local Hardware Feed</span>
+                    <span className={`h-2 w-2 rounded-full ${isStreamActive ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
+                    <span>{isStreamActive ? 'Local Hardware Feed' : 'Local Stream'}</span>
                   </div>
                 </div>
 
@@ -327,7 +355,7 @@ export default function ActiveSessionRoomModal({
             </div>
           )}
 
-          {/* TAB 2: LIVE SHARED CODE & NOTES (REAL-TIME SYNC) */}
+          {/* TAB 2: LIVE SHARED CODE & NOTES */}
           {activeTab === 'scratchpad' && (
             <div className="h-full flex flex-col space-y-2">
               <div className="flex items-center justify-between text-xs text-slate-400">
