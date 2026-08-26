@@ -65,7 +65,6 @@ export const storageService = {
   // Active Session User ID stored in sessionStorage so closing/exiting the browser forces re-login
   getActiveUserId() {
     if (typeof window === 'undefined') return null;
-    // Clear old legacy persistent session if present
     localStorage.removeItem(KEYS.CURRENT_USER_ID);
     return sessionStorage.getItem(KEYS.CURRENT_USER_ID) || null;
   },
@@ -108,12 +107,12 @@ export const storageService = {
           const formattedUsers = cloudUsers.map(u => ({
             id: u.id,
             email: u.email,
-            password: u.password || 'password123',
-            name: u.name,
+            password: u.password || '',
+            name: u.name || '',
             rollNo: u.roll_no || u.rollNo || '',
             branch: u.branch || '',
             year: u.year || '',
-            avatar: u.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.name)}`,
+            avatar: u.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.name || 'user')}`,
             bio: u.bio || '',
             credits: u.credits ?? 200,
             reputation: u.reputation ?? 100,
@@ -140,14 +139,14 @@ export const storageService = {
     }
 
     if (!matchedUser) {
-      throw new Error('Invalid Student/Teacher Email, Unique ID or Password. Please check your credentials!');
+      throw new Error('Invalid Email, Unique ID or Password. Please check your credentials!');
     }
 
     this.setActiveUserId(matchedUser.id);
     return matchedUser;
   },
 
-  // Real Multi-Device Registration Method
+  // Real Multi-Device Registration Method (No pre-filled dummy strings)
   async registerUser(userData) {
     let users = this.getUsers();
     const cleanEmail = (userData.email || '').trim().toLowerCase();
@@ -157,18 +156,18 @@ export const storageService = {
       throw new Error('An account with this email address already exists. Please log in instead!');
     }
 
-    const uniqueId = userData.uniqueId ? userData.uniqueId.trim().toLowerCase() : `stu-${Math.floor(1000 + Math.random() * 9000)}`;
+    const uniqueId = userData.uniqueId ? userData.uniqueId.trim().toLowerCase() : `usr-${Math.floor(10000 + Math.random() * 90000)}`;
     
     const newUser = {
       id: uniqueId,
       email: userData.email,
       password: userData.password,
       name: userData.name,
-      rollNo: userData.rollNo || `21BCE${Math.floor(1000 + Math.random() * 9000)}`,
-      branch: userData.branch || "Computer Science & Engineering",
-      year: userData.year || "3rd Year",
+      rollNo: userData.rollNo || '',
+      branch: userData.branch || '',
+      year: userData.year || '',
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(userData.name)}`,
-      bio: userData.bio || "Student/Teacher exchanging technical skills on PeerNexus.",
+      bio: userData.bio || '',
       credits: 200,
       reputation: 100,
       skillsOffered: userData.skillsOffered || [],
@@ -251,7 +250,7 @@ export const storageService = {
         const latest = projects[0];
         await supabase.from('projects').upsert({
           id: latest.id,
-          user_id: latest.leadId || 'stu-lead',
+          user_id: latest.leadId || 'usr-lead',
           owner: latest.leadName,
           title: latest.title,
           category: latest.category,
@@ -364,12 +363,12 @@ export const storageService = {
         const formattedUsers = cloudUsers.map(u => ({
           id: u.id,
           email: u.email,
-          password: u.password || 'password123',
-          name: u.name,
+          password: u.password || '',
+          name: u.name || '',
           rollNo: u.roll_no || u.rollNo || '',
           branch: u.branch || '',
           year: u.year || '',
-          avatar: u.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.name)}`,
+          avatar: u.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.name || 'user')}`,
           bio: u.bio || '',
           credits: u.credits ?? 200,
           reputation: u.reputation ?? 100,
@@ -386,7 +385,7 @@ export const storageService = {
         const formattedSkills = skills.map(s => ({
           id: s.id,
           authorId: s.user_id,
-          authorName: s.user_name || 'Student Peer',
+          authorName: s.user_name || 'Member',
           authorAvatar: s.user_avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.user_name || 'peer')}`,
           skillOffered: s.title,
           skillWanted: 'Tech Assistance',

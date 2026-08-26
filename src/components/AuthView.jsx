@@ -25,14 +25,15 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Register Form
+  // Register Form (Start completely blank for real user input)
   const [regForm, setRegForm] = useState({
     name: '',
     email: '',
     password: '',
     customId: '',
     rollNo: '',
-    branch: 'Computer Science & Engineering',
+    branch: '',
+    year: '',
     skillsOffered: '',
     skillsWanted: ''
   });
@@ -67,6 +68,7 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
         password: regForm.password,
         rollNo: regForm.rollNo,
         branch: regForm.branch,
+        year: regForm.year,
         skillsOffered: regForm.skillsOffered ? regForm.skillsOffered.split(',').map(s => s.trim()).filter(Boolean) : [],
         skillsWanted: regForm.skillsWanted ? regForm.skillsWanted.split(',').map(s => s.trim()).filter(Boolean) : []
       });
@@ -136,7 +138,7 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
               </div>
               <div>
                 <span className="font-extrabold text-lg text-white tracking-tight">PeerNexus</span>
-                <p className="text-[11px] text-slate-400 font-medium">Smart Campus Exchange Platform</p>
+                <p className="text-[11px] text-slate-400 font-medium">Smart Campus Platform</p>
               </div>
             </div>
 
@@ -148,7 +150,7 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
             {/* Bottom Caption */}
             <div className="text-xs text-slate-400 relative z-10">
               <p className="leading-relaxed">
-                Connect with peers for capstone projects, trade technical skills via escrow credits, and sync your account across all mobile and desktop devices.
+                Connect with students and teachers for capstone projects, trade technical skills via escrow credits, and sync your account across all mobile and desktop devices.
               </p>
             </div>
 
@@ -221,13 +223,13 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
                   className="space-y-4 text-xs"
                 >
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Student / Teacher Email or Unique ID</label>
+                    <label className="block text-slate-300 font-semibold mb-1">Email or Unique ID</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                       <input
                         type="text"
                         required
-                        placeholder="e.g. alex@campus.edu or stu-1082"
+                        placeholder="Enter your email or Unique ID"
                         value={loginIdentifier}
                         onChange={(e) => setLoginIdentifier(e.target.value)}
                         className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-500"
@@ -242,7 +244,7 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
                       <input
                         type="password"
                         required
-                        placeholder="••••••••"
+                        placeholder="Enter your password"
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
                         className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-cyan-500"
@@ -260,7 +262,7 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
                     {isLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin text-white" />
-                        <span>Authenticating Across Devices...</span>
+                        <span>Authenticating...</span>
                       </>
                     ) : (
                       <>
@@ -281,14 +283,14 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
                   exit={{ opacity: 0, x: -20 }}
                   transition={{ duration: 0.25 }}
                   onSubmit={handleRegisterSubmit} 
-                  className="space-y-3 text-xs"
+                  className="space-y-3 text-xs max-h-[420px] overflow-y-auto pr-1"
                 >
                   <div>
                     <label className="block text-slate-300 font-semibold mb-1">Full Name *</label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Alex Rivera"
+                      placeholder="Enter your full name"
                       value={regForm.name}
                       onChange={(e) => setRegForm({ ...regForm, name: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-cyan-500"
@@ -296,11 +298,11 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Campus Email Address *</label>
+                    <label className="block text-slate-300 font-semibold mb-1">Email Address *</label>
                     <input
                       type="email"
                       required
-                      placeholder="e.g. alex@campus.edu"
+                      placeholder="Enter your email address"
                       value={regForm.email}
                       onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-cyan-500"
@@ -312,18 +314,41 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
                     <input
                       type="password"
                       required
-                      placeholder="Create a secure password"
+                      placeholder="Create a password"
                       value={regForm.password}
                       onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-cyan-500"
                     />
                   </div>
 
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Department / Branch</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Computer Science / Physics"
+                        value={regForm.branch}
+                        onChange={(e) => setRegForm({ ...regForm, branch: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Role / Year</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Student 3rd Year / Faculty"
+                        value={regForm.year}
+                        onChange={(e) => setRegForm({ ...regForm, year: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-slate-300 font-semibold mb-1">Custom Unique ID (Optional)</label>
                     <input
                       type="text"
-                      placeholder="e.g. stu-8819 (Leave blank to auto-generate)"
+                      placeholder="Leave blank to auto-generate"
                       value={regForm.customId}
                       onChange={(e) => setRegForm({ ...regForm, customId: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-cyan-500 font-mono text-[11px]"
@@ -340,12 +365,12 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
                     {isLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin text-white" />
-                        <span>Creating Cloud Account...</span>
+                        <span>Creating Account...</span>
                       </>
                     ) : (
                       <>
                         <UserPlus className="h-4 w-4" />
-                        <span>Register Account & Get 200 Credits</span>
+                        <span>Register Account</span>
                       </>
                     )}
                   </motion.button>
