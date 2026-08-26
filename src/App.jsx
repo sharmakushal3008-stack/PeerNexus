@@ -10,12 +10,14 @@ import AIAdvisorModal from './components/AIAdvisorModal';
 import DirectChatDrawer from './components/DirectChatDrawer';
 import EditProfileModal from './components/EditProfileModal';
 import AuthView from './components/AuthView';
+import LandingPage from './components/LandingPage';
 import ActiveSessionRoomModal from './components/ActiveSessionRoomModal';
 
 import { storageService } from './services/storageService';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('skills');
+  const [showAuth, setShowAuth] = useState(false);
   
   // Persistent Multi-User Shared Tables & Session State
   const [users, setUsers] = useState(() => storageService.getUsers());
@@ -75,13 +77,14 @@ export default function App() {
     const newUser = storageService.registerUser(newUserData);
     setUsers(storageService.getUsers());
     setActiveUserId(newUser.id);
-    showToast(`Welcome to CampusForge, ${newUser.name}! (ID: ${newUser.id}) 🎉`);
+    showToast(`Welcome to PeerNexus, ${newUser.name}! (ID: ${newUser.id}) 🎉`);
   };
 
   // Real Logout Handler
   const handleLogout = () => {
     storageService.logoutUser();
     setActiveUserId(null);
+    setShowAuth(false);
     showToast(`Logged out successfully.`);
   };
 
@@ -111,23 +114,22 @@ export default function App() {
       return u;
     }));
 
-    showToast(`Request sent to peer ID ${skillOffer.authorId}. ${skillOffer.creditsRequired} Cr locked in Escrow!`);
+    showToast(`Request sent to peer. ${skillOffer.creditsRequired} Cr locked in Escrow!`);
   };
 
-  // Accept Trade Request (By Recipient User)
+  // Accept Trade Request
   const handleAcceptTradeRequest = (tradeId) => {
     setTradeRequests(tradeRequests.map(t => {
       if (t.id === tradeId) return { ...t, status: 'Accepted' };
       return t;
     }));
-    showToast(`Accepted trade request! Session room is now active.`);
+    showToast(`Accepted trade request! Session room is active.`);
   };
 
   // Decline Trade Request
   const handleDeclineTradeRequest = (tradeId) => {
     const trd = tradeRequests.find(t => t.id === tradeId);
     if (trd) {
-      // Refund escrow credits to sender
       setUsers(users.map(u => {
         if (u.id === trd.senderId) return { ...u, credits: u.credits + trd.creditsRequired };
         return u;
@@ -142,7 +144,6 @@ export default function App() {
     setTradeRequests(tradeRequests.filter(t => t.id !== tradeObj.id));
     setActiveSessionTrade(null);
 
-    // Release escrow credits to receiver and update reputation
     setUsers(users.map(u => {
       if (u.id === tradeObj.receiverId) {
         return {
@@ -160,7 +161,7 @@ export default function App() {
       return u;
     }));
 
-    showToast(`Session completed! ${tradeObj.creditsRequired} Cr released & rating of ${rating}★ submitted.`);
+    showToast(`Session completed! ${tradeObj.creditsRequired} Cr released to recipient.`);
   };
 
   // Post Skill Offer
@@ -241,7 +242,7 @@ export default function App() {
   // Reset Storage
   const handleWipeData = () => {
     storageService.wipeData();
-    setUsers(storageService.getUsers());
+    setUsers([]);
     setActiveUserId(null);
     setSkillOffers([]);
     setProjects([]);
@@ -250,20 +251,31 @@ export default function App() {
     showToast(`Cleared database!`);
   };
 
-  // IF NOT LOGGED IN: SHOW AUTH SCREEN DIRECTLY
+  // UNAUTHENTICATED VISITOR VIEW: LANDING PAGE OR AUTH MODAL
   if (!currentUser) {
+    if (showAuth) {
+      return (
+        <AuthView
+          onLoginSuccess={handleLoginSuccess}
+          onRegisterSuccess={handleRegisterSuccess}
+          onBackToLanding={() => setShowAuth(false)}
+        />
+      );
+    }
+
     return (
-      <AuthView
-        onLoginSuccess={handleLoginSuccess}
-        onRegisterSuccess={handleRegisterSuccess}
+      <LandingPage
+        onGetStarted={() => setShowAuth(true)}
+        onOpenLogin={() => setShowAuth(true)}
       />
     );
   }
 
+  // AUTHENTICATED USER DASHBOARD
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950">
       
-      {/* Refined Sidebar Navigation */}
+      {/* Sidebar Navigation */}
       <SidebarNav
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -334,7 +346,7 @@ export default function App() {
             <ProfileDashboard
               currentUser={currentUser}
               tradeRequests={tradeRequests}
-              userProjects={projects.filter(p => p.leadId === currentUser.id || p.leadName.includes(currentUser.name))}
+              userProjects={projects.filter(p => p.leadId === currentUser.id || (p.leadName && p.leadName.includes(currentUser.name)))}
               onEditProfile={() => setIsEditProfileOpen(true)}
               onResetData={handleWipeData}
               onAcceptTradeRequest={handleAcceptTradeRequest}
@@ -389,7 +401,7 @@ export default function App() {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-indigo-500/50 text-indigo-200 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-semibold animate-bounce">
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-cyan-500/50 text-cyan-200 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-semibold animate-bounce">
           <div className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
           <span>{toastMessage}</span>
         </div>

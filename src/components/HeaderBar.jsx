@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  Search, 
   Bell, 
   Coins, 
   Sparkles, 
@@ -14,14 +13,14 @@ export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpen
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/90 px-4 sm:px-6 py-3">
+    <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/90 px-4 sm:px-6 py-3">
       <div className="flex items-center justify-between gap-4">
         
         {/* Left Mobile Menu Toggle + Title */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden p-2 text-slate-400 hover:text-white rounded-lg bg-slate-800"
+            className="md:hidden p-2 text-slate-400 hover:text-white rounded-lg bg-slate-900 border border-slate-800"
           >
             {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -34,7 +33,7 @@ export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpen
               {activeTab === 'resources' && 'Campus Labs & Workstation Booking'}
               {activeTab === 'profile' && 'Student Portfolio & Inbox'}
             </h1>
-            <p className="text-[11px] text-slate-400 hidden sm:block">PeerNexus Platform • Logged in as <strong className="text-slate-200">{currentUser.name}</strong> (<span className="font-mono text-indigo-300">ID: {currentUser.id}</span>)</p>
+            <p className="text-[11px] text-slate-400 hidden sm:block">PeerNexus Platform • Logged in as <strong className="text-slate-200">{currentUser.name}</strong> (<span className="font-mono text-cyan-300">ID: {currentUser.id}</span>)</p>
           </div>
         </div>
 
@@ -44,10 +43,10 @@ export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpen
           {/* AI Advisor Badge Pill */}
           <button
             onClick={onOpenAIAdvisor}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 text-purple-300 border border-purple-500/30 hover:bg-purple-600/30 text-xs font-semibold transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-900/40 text-purple-300 border border-purple-500/40 hover:bg-purple-900/60 text-xs font-semibold transition"
           >
             <Sparkles className="h-3.5 w-3.5 text-amber-300 animate-pulse" />
-            <span className="hidden sm:inline">AI Advisor</span>
+            <span className="hidden sm:inline">AI Mentor</span>
           </button>
 
           {/* Credit Balance Pill */}
@@ -60,11 +59,11 @@ export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpen
           <div className="relative">
             <button
               onClick={() => setIsNotifOpen(!isNotifOpen)}
-              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl relative transition"
+              className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl relative transition"
             >
               <Bell className="h-4 w-4" />
               {notifications.length > 0 && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
               )}
             </button>
 
@@ -116,7 +115,7 @@ export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpen
                 setIsMobileMenuOpen(false);
               }}
               className={`p-2.5 rounded-lg text-xs font-semibold text-left capitalize ${
-                activeTab === tab ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300'
+                activeTab === tab ? 'bg-gradient-to-r from-cyan-500 to-indigo-600 text-white' : 'bg-slate-900 text-slate-300'
               }`}
             >
               {tab}

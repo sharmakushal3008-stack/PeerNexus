@@ -12,41 +12,8 @@ const KEYS = {
   CURRENT_USER_ID: 'cf_active_session_user_id'
 };
 
-// Initial Seed Users with Credentials
-const SEED_USERS = [
-  {
-    id: "stu-101",
-    email: "aarav@campus.edu",
-    password: "password123",
-    name: "Aarav Sharma",
-    rollNo: "21BCE1042",
-    branch: "Computer Science & Engineering",
-    year: "4th Year (8th Sem)",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200",
-    bio: "Full-Stack Web Dev & React enthusiast.",
-    credits: 300,
-    reputation: 95,
-    skillsOffered: ["React.js", "Node.js", "MongoDB"],
-    skillsWanted: ["PyTorch", "Docker"],
-    badges: ["Verified 4th Year"]
-  },
-  {
-    id: "stu-102",
-    email: "priya@campus.edu",
-    password: "password123",
-    name: "Priya Patel",
-    rollNo: "21BCE1089",
-    branch: "Computer Science (AI/ML)",
-    year: "4th Year (8th Sem)",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200",
-    bio: "Computer Vision & PyTorch researcher.",
-    credits: 450,
-    reputation: 98,
-    skillsOffered: ["PyTorch", "Computer Vision", "Python"],
-    skillsWanted: ["React.js", "Tailwind CSS"],
-    badges: ["AI Specialist"]
-  }
-];
+// Clean initial empty users array for real user testing
+const SEED_USERS = [];
 
 // Setup Broadcast Channel for Real-Time Cross-Tab / Cross-Window Sync
 let broadcastChannel = null;
@@ -82,37 +49,15 @@ export const storageService = {
     }
   },
 
-  // --- USERS & CROSS-DEVICE AUTH ---
+  // --- USERS & AUTH ---
   getUsers() {
     const data = localStorage.getItem(KEYS.USERS);
-    let usersList = SEED_USERS;
-    
-    if (data) {
-      try {
-        const parsed = JSON.parse(data);
-        usersList = parsed.map(u => {
-          const seedMatch = SEED_USERS.find(s => s.id === u.id);
-          return {
-            ...u,
-            id: u.id || `stu-${Math.floor(1000 + Math.random() * 9000)}`,
-            email: u.email || (seedMatch ? seedMatch.email : `${(u.name || 'user').toLowerCase().replace(/\s+/g, '')}@campus.edu`),
-            password: u.password || (seedMatch ? seedMatch.password : "password123"),
-            name: u.name || "Student User"
-          };
-        });
-
-        // Ensure SEED_USERS exist
-        SEED_USERS.forEach(seed => {
-          if (!usersList.some(u => u.id === seed.id)) {
-            usersList.unshift(seed);
-          }
-        });
-      } catch (e) {
-        usersList = SEED_USERS;
-      }
+    if (!data) return [];
+    try {
+      return JSON.parse(data) || [];
+    } catch (e) {
+      return [];
     }
-
-    return usersList;
   },
 
   saveUsers(users) {
@@ -142,48 +87,19 @@ export const storageService = {
       const uId = (u.id || '').toLowerCase();
       const uEmail = (u.email || '').toLowerCase();
       const uName = (u.name || '').toLowerCase();
-      const uFirstName = uName.split(' ')[0];
       
       const idMatch = (
         uId === cleanId || 
         uEmail === cleanId || 
-        uName === cleanId || 
-        uFirstName === cleanId ||
-        cleanId.includes(uFirstName) ||
-        uEmail.includes(cleanId)
+        uName === cleanId
       );
       
-      const passMatch = !password || (u.password || 'password123') === password || password === 'password123';
+      const passMatch = (u.password || '') === password;
       return idMatch && passMatch;
     });
 
-    // CROSS-DEVICE AUTO-RECOVERY PROTOCOL:
-    // If logging in on a new device/browser with a unique ID format (e.g. "stu-4821" or email)
-    if (!matchedUser && (cleanId.startsWith('stu-') || cleanId.includes('@'))) {
-      const generatedName = cleanId.startsWith('stu-') ? `Student (${cleanId.toUpperCase()})` : cleanId.split('@')[0];
-      matchedUser = {
-        id: cleanId.startsWith('stu-') ? cleanId : `stu-${Math.floor(1000 + Math.random() * 9000)}`,
-        email: cleanId.includes('@') ? cleanId : `${cleanId}@campus.edu`,
-        password: password || "password123",
-        name: generatedName,
-        rollNo: `21BCE${Math.floor(1000 + Math.random() * 9000)}`,
-        branch: "Computer Science & Engineering",
-        year: "4th Year (8th Sem)",
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${generatedName}`,
-        bio: "Restored student profile across devices.",
-        credits: 300,
-        reputation: 95,
-        skillsOffered: ["React.js", "Node.js"],
-        skillsWanted: ["PyTorch"],
-        badges: ["Cross-Device Verified"]
-      };
-
-      users.push(matchedUser);
-      this.saveUsers(users);
-    }
-
     if (!matchedUser) {
-      throw new Error('Invalid Student ID / Email or Password. Please try again!');
+      throw new Error('Invalid email/ID or password. If you do not have an account, please Sign Up first!');
     }
 
     this.setActiveUserId(matchedUser.id);
@@ -207,15 +123,15 @@ export const storageService = {
       password: userData.password,
       name: userData.name,
       rollNo: userData.rollNo || `21BCE${Math.floor(1000 + Math.random() * 9000)}`,
-      branch: userData.branch || "Computer Science",
-      year: userData.year || "4th Year (8th Sem)",
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userData.name}`,
-      bio: userData.bio || "CS Undergrad learning new skills.",
-      credits: 250,
-      reputation: 90,
+      branch: userData.branch || "Computer Science & Engineering",
+      year: userData.year || "3rd Year",
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(userData.name)}`,
+      bio: userData.bio || "Student learning & exchanging technical skills on PeerNexus.",
+      credits: 200,
+      reputation: 100,
       skillsOffered: userData.skillsOffered || [],
       skillsWanted: userData.skillsWanted || [],
-      badges: ["Verified Unique ID"]
+      badges: ["PeerNexus Member"]
     };
 
     users.push(newUser);
@@ -288,7 +204,7 @@ export const storageService = {
     this.notifySync();
   },
 
-  // --- DEVICE SYNC DATA EXPORT / IMPORT TOKEN ---
+  // Export / Import Token
   exportSyncToken() {
     const data = {
       users: this.getUsers(),
@@ -319,7 +235,7 @@ export const storageService = {
     }
   },
 
-  // Reset Data
+  // Reset Data completely
   wipeData() {
     localStorage.removeItem(KEYS.USERS);
     localStorage.removeItem(KEYS.SKILLS);
@@ -329,10 +245,10 @@ export const storageService = {
     localStorage.removeItem(KEYS.TRADES);
     localStorage.removeItem(KEYS.MESSAGES);
     localStorage.removeItem(KEYS.CURRENT_USER_ID);
-    this.saveUsers(SEED_USERS);
+    this.notifySync();
   },
 
-  // --- CLOUD DATABASE (SUPABASE) INTEGRATION API ---
+  // --- CLOUD DATABASE (SUPABASE) ---
   isCloudConnected() {
     return isSupabaseConfigured;
   },
@@ -359,4 +275,3 @@ export const storageService = {
     }
   }
 };
-

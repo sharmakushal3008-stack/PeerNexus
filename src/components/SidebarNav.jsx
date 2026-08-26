@@ -7,10 +7,8 @@ import {
   Calendar, 
   User, 
   Coins, 
-  Award,
   Sparkles,
   ChevronRight,
-  ShieldCheck,
   LogOut
 } from 'lucide-react';
 
@@ -24,13 +22,13 @@ export default function SidebarNav({ activeTab, setActiveTab, currentUser, onOpe
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800/90 flex flex-col justify-between hidden md:flex shrink-0 h-screen sticky top-0">
+    <aside className="w-64 bg-slate-950 border-r border-slate-800/90 flex flex-col justify-between hidden md:flex shrink-0 h-screen sticky top-0">
       
       <div>
         {/* Brand Header */}
         <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-cyan-500/25">
               <GraduationCap className="h-6 w-6 text-white" />
             </div>
             <div>
@@ -38,7 +36,7 @@ export default function SidebarNav({ activeTab, setActiveTab, currentUser, onOpe
                 <span className="font-extrabold text-base tracking-tight text-white">
                   PeerNexus
                 </span>
-                <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                   v2.0
                 </span>
               </div>
@@ -51,18 +49,18 @@ export default function SidebarNav({ activeTab, setActiveTab, currentUser, onOpe
         <div className="p-4">
           <button
             onClick={onOpenAIAdvisor}
-            className="w-full p-3 rounded-xl bg-gradient-to-r from-purple-900/60 via-indigo-900/50 to-purple-900/60 border border-purple-500/30 text-left hover:border-purple-500/60 transition group flex items-center justify-between"
+            className="w-full p-3 rounded-2xl bg-slate-900/90 border border-indigo-500/30 text-left hover:border-cyan-500/60 transition group flex items-center justify-between shadow-lg"
           >
             <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-purple-600/30 flex items-center justify-center border border-purple-500/40">
+              <div className="h-8 w-8 rounded-xl bg-indigo-600/30 flex items-center justify-center border border-indigo-500/40">
                 <Sparkles className="h-4 w-4 text-amber-300 animate-pulse" />
               </div>
               <div>
-                <div className="text-xs font-bold text-white group-hover:text-purple-200">AI Capstone Mentor</div>
-                <div className="text-[10px] text-purple-300">Ideas & Report Advice</div>
+                <div className="text-xs font-bold text-white group-hover:text-cyan-300">AI Capstone Mentor</div>
+                <div className="text-[10px] text-slate-400">Ideas & Code Review</div>
               </div>
             </div>
-            <ChevronRight className="h-4 w-4 text-purple-400 group-hover:translate-x-0.5 transition" />
+            <ChevronRight className="h-4 w-4 text-slate-400 group-hover:translate-x-0.5 transition" />
           </button>
         </div>
 
@@ -78,15 +76,15 @@ export default function SidebarNav({ activeTab, setActiveTab, currentUser, onOpe
                 onClick={() => setActiveTab(item.id)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
                   isActive
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    ? 'bg-gradient-to-r from-cyan-500 to-indigo-600 text-white shadow-lg shadow-indigo-600/25'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <Icon className={`h-4 w-4 transition-transform group-hover:scale-110 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                   <div className="text-left">
                     <div>{item.label}</div>
-                    <div className={`text-[10px] font-normal ${isActive ? 'text-indigo-200' : 'text-slate-500'}`}>{item.desc}</div>
+                    <div className={`text-[10px] font-normal ${isActive ? 'text-cyan-100' : 'text-slate-500'}`}>{item.desc}</div>
                   </div>
                 </div>
 
@@ -104,7 +102,7 @@ export default function SidebarNav({ activeTab, setActiveTab, currentUser, onOpe
       </div>
 
       {/* User Footer Profile & Log Out */}
-      <div className="p-4 border-t border-slate-800/80 bg-slate-950/60 space-y-2">
+      <div className="p-4 border-t border-slate-800/80 bg-slate-900/60 space-y-2">
         <div 
           onClick={() => setActiveTab('profile')}
           className="flex items-center justify-between cursor-pointer p-2 rounded-xl hover:bg-slate-800/70 transition"
@@ -113,7 +111,7 @@ export default function SidebarNav({ activeTab, setActiveTab, currentUser, onOpe
             <img
               src={currentUser.avatar}
               alt=""
-              className="h-9 w-9 rounded-full border border-indigo-500/50 object-cover"
+              className="h-9 w-9 rounded-full border border-cyan-500/50 object-cover"
             />
             <div>
               <div className="text-xs font-bold text-slate-100">{currentUser.name}</div>
