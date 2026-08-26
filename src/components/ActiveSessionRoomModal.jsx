@@ -13,6 +13,15 @@ import {
   AlertCircle
 } from 'lucide-react';
 
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' }
+  ]
+};
+
 export default function ActiveSessionRoomModal({ 
   isOpen, 
   onClose, 
@@ -29,82 +38,191 @@ export default function ActiveSessionRoomModal({
   const [inputMsg, setInputMsg] = useState('');
   const [mediaError, setMediaError] = useState(null);
   const [isStreamActive, setIsStreamActive] = useState(false);
+  const [isRemoteConnected, setIsRemoteConnected] = useState(false);
 
   const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
   const mediaStreamRef = useRef(null);
-  const noteBroadcastRef = useRef(null);
+  const peerConnectionRef = useRef(null);
+  const roomChannelRef = useRef(null);
 
   const otherPersonName = trade ? (trade.senderId === currentUser.id ? (trade.receiverName || `Peer (${trade.receiverId})`) : trade.senderName) : '';
+  const isInitiator = trade ? trade.senderId === currentUser.id : false;
 
-  // Callback Ref to reliably attach stream whenever video node mounts in DOM
+  // Callback ref for Local Video Node
   const setLocalVideoNode = useCallback((node) => {
     localVideoRef.current = node;
     if (node && mediaStreamRef.current) {
       node.srcObject = mediaStreamRef.current;
-      node.play().catch(err => console.warn('Video play catch:', err));
+      node.play().catch(err => console.warn('Local video play:', err));
     }
   }, []);
 
-  // Initialize WebRTC Camera & Microphone Stream when Modal Opens
+  // Callback ref for Remote Video Node
+  const setRemoteVideoNode = useCallback((node) => {
+    remoteVideoRef.current = node;
+  }, []);
+
+  // WebRTC Connection Setup & Signaling Engine
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !trade) return;
 
     let isMounted = true;
+    const channelName = `peernexus_session_${trade.id}`;
 
-    async function initMedia() {
+    async function setupWebRTC() {
       try {
         setMediaError(null);
         setIsStreamActive(false);
 
+        // 1. Get Local Camera & Microphone Stream
+        let localStream = null;
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: { ideal: 640 },
-              height: { ideal: 480 },
-              facingMode: 'user'
-            },
+          localStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
             audio: true
           });
 
           if (!isMounted) {
-            stream.getTracks().forEach(t => t.stop());
+            localStream.getTracks().forEach(t => t.stop());
             return;
           }
 
-          mediaStreamRef.current = stream;
+          mediaStreamRef.current = localStream;
           setIsStreamActive(true);
 
           if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-            localVideoRef.current.play().catch(e => console.warn('Auto play error:', e));
+            localVideoRef.current.srcObject = localStream;
+            localVideoRef.current.play().catch(e => console.warn('Local play:', e));
           }
         } else {
           setMediaError('Media devices not supported on this browser context.');
         }
-      } catch (err) {
-        console.warn('WebRTC Media Stream Error:', err);
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          setMediaError('Camera/Mic permission was denied. Please allow camera access in browser settings.');
-        } else {
-          setMediaError('Unable to access camera hardware. Avatar fallback active.');
+
+        // 2. Instantiate RTCPeerConnection with STUN Servers
+        const pc = new RTCPeerConnection(ICE_SERVERS);
+        peerConnectionRef.current = pc;
+
+        // Add Local Tracks to WebRTC Peer Connection
+        if (localStream) {
+          localStream.getTracks().forEach(track => {
+            pc.addTrack(track, localStream);
+          });
         }
+
+        // Handle Incoming Remote Stream Track
+        pc.ontrack = (event) => {
+          if (event.streams && event.streams[0]) {
+            if (remoteVideoRef.current) {
+              remoteVideoRef.current.srcObject = event.streams[0];
+              remoteVideoRef.current.play().catch(e => console.warn('Remote play error:', e));
+            }
+            setIsRemoteConnected(true);
+          }
+        };
+
+        // Handle ICE Candidates and Broadcast to Signaling Channel
+        pc.onicecandidate = (event) => {
+          if (event.candidate && roomChannelRef.current) {
+            roomChannelRef.current.postMessage({
+              type: 'ICE_CANDIDATE',
+              senderId: currentUser.id,
+              candidate: event.candidate
+            });
+          }
+        };
+
+        // 3. Setup Broadcast Channel for Real-Time Cross-Device Signaling
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const channel = new BroadcastChannel(channelName);
+          roomChannelRef.current = channel;
+
+          channel.onmessage = async (e) => {
+            const data = e.data;
+            if (!data || data.senderId === currentUser.id) return;
+
+            if (data.type === 'NOTE_UPDATE') {
+              setNotesText(data.content);
+              return;
+            }
+
+            if (data.type === 'SDP_OFFER') {
+              try {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                channel.postMessage({
+                  type: 'SDP_ANSWER',
+                  senderId: currentUser.id,
+                  sdp: answer
+                });
+              } catch (err) {
+                console.warn('SDP Offer error:', err);
+              }
+            } else if (data.type === 'SDP_ANSWER') {
+              try {
+                if (pc.signalingState !== 'stable') {
+                  await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                }
+              } catch (err) {
+                console.warn('SDP Answer error:', err);
+              }
+            } else if (data.type === 'ICE_CANDIDATE') {
+              try {
+                if (data.candidate) {
+                  await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                }
+              } catch (err) {
+                console.warn('ICE Candidate error:', err);
+              }
+            } else if (data.type === 'JOIN_ROOM') {
+              // Initiate SDP Offer when peer enters
+              if (isInitiator) {
+                try {
+                  const offer = await pc.createOffer();
+                  await pc.setLocalDescription(offer);
+                  channel.postMessage({
+                    type: 'SDP_OFFER',
+                    senderId: currentUser.id,
+                    sdp: offer
+                  });
+                } catch (err) {
+                  console.warn('Offer creation error:', err);
+                }
+              }
+            }
+          };
+
+          // Broadcast Join Room Announcement
+          channel.postMessage({ type: 'JOIN_ROOM', senderId: currentUser.id });
+
+          // If initiator, send initial offer
+          if (isInitiator) {
+            setTimeout(async () => {
+              if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
+                try {
+                  const offer = await pc.createOffer();
+                  await pc.setLocalDescription(offer);
+                  channel.postMessage({
+                    type: 'SDP_OFFER',
+                    senderId: currentUser.id,
+                    sdp: offer
+                  });
+                } catch (e) {
+                  console.warn('Initial offer error:', e);
+                }
+              }
+            }, 800);
+          }
+        }
+
+      } catch (err) {
+        console.warn('WebRTC Media Setup Error:', err);
+        setMediaError('Camera permission denied or hardware unavailable.');
       }
     }
 
-    initMedia();
-
-    // Setup Broadcast Channel for Live Cross-Device Code & Notes Sync
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      const roomChannelName = `peernexus_room_notes_${trade?.id || 'session'}`;
-      const channel = new BroadcastChannel(roomChannelName);
-      noteBroadcastRef.current = channel;
-
-      channel.onmessage = (e) => {
-        if (e.data && e.data.type === 'NOTE_UPDATE' && e.data.senderId !== currentUser.id) {
-          setNotesText(e.data.content);
-        }
-      };
-    }
+    setupWebRTC();
 
     return () => {
       isMounted = false;
@@ -112,23 +230,38 @@ export default function ActiveSessionRoomModal({
         mediaStreamRef.current.getTracks().forEach(t => t.stop());
         mediaStreamRef.current = null;
       }
-      if (noteBroadcastRef.current) {
-        noteBroadcastRef.current.close();
-        noteBroadcastRef.current = null;
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      if (roomChannelRef.current) {
+        roomChannelRef.current.close();
+        roomChannelRef.current = null;
       }
       setIsStreamActive(false);
+      setIsRemoteConnected(false);
     };
   }, [isOpen, trade?.id]);
 
-  // Ensure video node receives stream whenever activeTab changes back to video
+  // Re-bind remote & local video tags when tab switches back to 'video'
   useEffect(() => {
-    if (activeTab === 'video' && localVideoRef.current && mediaStreamRef.current) {
-      localVideoRef.current.srcObject = mediaStreamRef.current;
-      localVideoRef.current.play().catch(e => console.warn('Tab switch play error:', e));
+    if (activeTab === 'video') {
+      if (localVideoRef.current && mediaStreamRef.current) {
+        localVideoRef.current.srcObject = mediaStreamRef.current;
+        localVideoRef.current.play().catch(e => console.warn(e));
+      }
+      if (remoteVideoRef.current && peerConnectionRef.current) {
+        const receivers = peerConnectionRef.current.getReceivers();
+        if (receivers && receivers.length > 0 && receivers[0].track) {
+          const remoteStream = new MediaStream([receivers[0].track]);
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.play().catch(e => console.warn(e));
+        }
+      }
     }
   }, [activeTab]);
 
-  // Toggle Video Track
+  // Toggle Local Video Track
   const handleToggleVideo = () => {
     const nextState = !isVideoOn;
     setIsVideoOn(nextState);
@@ -139,7 +272,7 @@ export default function ActiveSessionRoomModal({
     }
   };
 
-  // Toggle Audio Track
+  // Toggle Local Audio Track
   const handleToggleMic = () => {
     const nextState = !isMicOn;
     setIsMicOn(nextState);
@@ -154,8 +287,8 @@ export default function ActiveSessionRoomModal({
   const handleNotesChange = (e) => {
     const newText = e.target.value;
     setNotesText(newText);
-    if (noteBroadcastRef.current) {
-      noteBroadcastRef.current.postMessage({
+    if (roomChannelRef.current) {
+      roomChannelRef.current.postMessage({
         type: 'NOTE_UPDATE',
         senderId: currentUser.id,
         content: newText,
@@ -269,7 +402,7 @@ export default function ActiveSessionRoomModal({
         {/* MAIN BODY */}
         <div className="flex-1 overflow-hidden bg-slate-950/40 p-3 sm:p-4">
           
-          {/* TAB 1: VIDEO CALL ROOM */}
+          {/* TAB 1: VIDEO CALL ROOM WITH BI-DIRECTIONAL WEBRTC PEER STREAMS */}
           {activeTab === 'video' && (
             <div className="h-full flex flex-col justify-between space-y-3">
               
@@ -282,7 +415,7 @@ export default function ActiveSessionRoomModal({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 flex-1 min-h-0">
                 
-                {/* Local Camera Feed (Always keep <video> mounted in DOM) */}
+                {/* 1. LOCAL CAMERA FEED */}
                 <div className="bg-slate-950 border border-slate-800 rounded-2xl relative overflow-hidden flex items-center justify-center group">
                   <video
                     ref={setLocalVideoNode}
@@ -311,23 +444,34 @@ export default function ActiveSessionRoomModal({
                   </div>
                 </div>
 
-                {/* Peer Stream Feed */}
+                {/* 2. REMOTE PEER CAMERA STREAM */}
                 <div className="bg-slate-950 border border-slate-800 rounded-2xl relative overflow-hidden flex items-center justify-center">
-                  <div className="text-center space-y-3 p-4">
-                    <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-full mx-auto bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-xl font-bold text-white shadow-xl">
-                      {otherPersonName.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="text-xs sm:text-sm font-bold text-white">{otherPersonName}</div>
-                      <div className="text-[11px] text-indigo-400 font-semibold flex items-center justify-center gap-1 mt-1">
-                        <span className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse" />
-                        <span>Peer Connected • WebRTC</span>
+                  <video
+                    ref={setRemoteVideoNode}
+                    autoPlay
+                    playsInline
+                    style={{ display: isRemoteConnected ? 'block' : 'none' }}
+                    className="w-full h-full object-cover rounded-2xl"
+                  />
+
+                  {!isRemoteConnected && (
+                    <div className="text-center space-y-3 p-4">
+                      <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-full mx-auto bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-xl font-bold text-white shadow-xl">
+                        {otherPersonName.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="text-xs sm:text-sm font-bold text-white">{otherPersonName}</div>
+                        <div className="text-[11px] text-indigo-400 font-semibold flex items-center justify-center gap-1 mt-1">
+                          <span className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse" />
+                          <span>Peer Connected • Awaiting Stream</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                   
-                  <div className="absolute bottom-3 left-3 bg-slate-950/90 backdrop-blur-md border border-slate-800 px-2.5 py-1 rounded-lg text-[10px] text-indigo-300 font-mono">
-                    Peer Stream • Encrypted Session
+                  <div className="absolute bottom-3 left-3 bg-slate-950/90 backdrop-blur-md border border-slate-800 px-2.5 py-1 rounded-lg text-[10px] text-indigo-300 font-mono flex items-center gap-1.5">
+                    <span className={`h-2 w-2 rounded-full ${isRemoteConnected ? 'bg-emerald-400 animate-ping' : 'bg-indigo-400'}`} />
+                    <span>{isRemoteConnected ? 'Peer Live Feed' : 'Peer Stream • Encrypted STUN'}</span>
                   </div>
                 </div>
 
