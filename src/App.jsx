@@ -38,9 +38,9 @@ export default function App() {
   // Derived Active User Object
   const currentUser = users.find(u => u.id === activeUserId);
 
-  // Auto-sync from Supabase Cloud on App Startup (for mobile & multi-device sync)
+  // Auto-sync from Supabase Cloud on App Startup & Live 3s Polling for Peer-to-Peer Updates
   useEffect(() => {
-    async function initCloudSync() {
+    async function doCloudSync() {
       await storageService.syncFromCloud();
       setUsers(storageService.getUsers());
       setActiveUserId(storageService.getActiveUserId());
@@ -49,7 +49,15 @@ export default function App() {
       setTradeRequests(storageService.getTradeRequests());
       setMessages(storageService.getMessages());
     }
-    initCloudSync();
+
+    doCloudSync();
+
+    // Live background polling interval (3 seconds) so peers receive requests across devices
+    const interval = setInterval(() => {
+      doCloudSync();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Real-Time Cross-Tab / Cross-Window Sync Listener
@@ -68,10 +76,6 @@ export default function App() {
   // Sync to storage on local state change
   useEffect(() => { storageService.saveUsers(users); }, [users]);
   useEffect(() => { storageService.setActiveUserId(activeUserId); }, [activeUserId]);
-  useEffect(() => { storageService.saveSkillOffers(skillOffers); }, [skillOffers]);
-  useEffect(() => { storageService.saveProjects(projects); }, [projects]);
-  useEffect(() => { storageService.saveTradeRequests(tradeRequests); }, [tradeRequests]);
-  useEffect(() => { storageService.saveMessages(messages); }, [messages]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -102,8 +106,8 @@ export default function App() {
     showToast(`Logged out successfully.`);
   };
 
-  // Send Trade Request to Peer
-  const handleTradeRequest = (skillOffer) => {
+  // Send Trade Request to Peer (Pushed to Supabase Cloud)
+  const handleTradeRequest = async (skillOffer) => {
     if (!currentUser) return;
     const newTradeRequest = {
       id: `trd-${Date.now()}`,
@@ -118,47 +122,59 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
 
-    setTradeRequests([newTradeRequest, ...tradeRequests]);
+    const updatedTrades = [newTradeRequest, ...tradeRequests];
+    setTradeRequests(updatedTrades);
+    await storageService.saveTradeRequests(updatedTrades);
 
     // Hold credits in escrow for current user
-    setUsers(users.map(u => {
+    const updatedUsers = users.map(u => {
       if (u.id === currentUser.id) {
         return { ...u, credits: Math.max(0, u.credits - skillOffer.creditsRequired) };
       }
       return u;
-    }));
+    });
+    setUsers(updatedUsers);
+    storageService.saveUsers(updatedUsers);
 
-    showToast(`Request sent to peer. ${skillOffer.creditsRequired} Cr locked in Escrow!`);
+    showToast(`Request sent to peer! Locked ${skillOffer.creditsRequired} Cr in Escrow.`);
   };
 
-  // Accept Trade Request
-  const handleAcceptTradeRequest = (tradeId) => {
-    setTradeRequests(tradeRequests.map(t => {
+  // Accept Trade Request (Pushed to Supabase Cloud)
+  const handleAcceptTradeRequest = async (tradeId) => {
+    const updatedTrades = tradeRequests.map(t => {
       if (t.id === tradeId) return { ...t, status: 'Accepted' };
       return t;
-    }));
+    });
+    setTradeRequests(updatedTrades);
+    await storageService.saveTradeRequests(updatedTrades);
     showToast(`Accepted trade request! Session room is active.`);
   };
 
-  // Decline Trade Request
-  const handleDeclineTradeRequest = (tradeId) => {
+  // Decline Trade Request (Pushed to Supabase Cloud)
+  const handleDeclineTradeRequest = async (tradeId) => {
     const trd = tradeRequests.find(t => t.id === tradeId);
     if (trd) {
-      setUsers(users.map(u => {
+      const updatedUsers = users.map(u => {
         if (u.id === trd.senderId) return { ...u, credits: u.credits + trd.creditsRequired };
         return u;
-      }));
+      });
+      setUsers(updatedUsers);
+      storageService.saveUsers(updatedUsers);
     }
-    setTradeRequests(tradeRequests.filter(t => t.id !== tradeId));
+    const updatedTrades = tradeRequests.filter(t => t.id !== tradeId);
+    setTradeRequests(updatedTrades);
+    await storageService.saveTradeRequests(updatedTrades);
     showToast(`Trade request declined & escrow refunded.`);
   };
 
-  // Complete Trade Session & Transfer Credits
-  const handleCompleteTrade = (tradeObj, rating = 5) => {
-    setTradeRequests(tradeRequests.filter(t => t.id !== tradeObj.id));
+  // Complete Trade Session & Transfer Credits (Pushed to Supabase Cloud)
+  const handleCompleteTrade = async (tradeObj, rating = 5) => {
+    const updatedTrades = tradeRequests.filter(t => t.id !== tradeObj.id);
+    setTradeRequests(updatedTrades);
+    await storageService.saveTradeRequests(updatedTrades);
     setActiveSessionTrade(null);
 
-    setUsers(users.map(u => {
+    const updatedUsers = users.map(u => {
       if (u.id === tradeObj.receiverId) {
         return {
           ...u,
@@ -173,19 +189,22 @@ export default function App() {
         };
       }
       return u;
-    }));
+    });
+
+    setUsers(updatedUsers);
+    storageService.saveUsers(updatedUsers);
 
     showToast(`Session completed! ${tradeObj.creditsRequired} Cr released to recipient.`);
   };
 
-  // Post Skill Offer
-  const handleAddNewSkillOffer = (newOffer) => {
+  // Post Skill Offer (Pushed to Supabase Cloud)
+  const handleAddNewSkillOffer = async (newOffer) => {
     if (!currentUser) return;
     const updatedSkills = [newOffer, ...skillOffers];
     setSkillOffers(updatedSkills);
-    storageService.saveSkillOffers(updatedSkills);
+    await storageService.saveSkillOffers(updatedSkills);
 
-    setUsers(users.map(u => {
+    const updatedUsers = users.map(u => {
       if (u.id === currentUser.id) {
         return {
           ...u,
@@ -194,12 +213,15 @@ export default function App() {
         };
       }
       return u;
-    }));
+    });
+    setUsers(updatedUsers);
+    storageService.saveUsers(updatedUsers);
+
     showToast(`Skill offer "${newOffer.skillOffered}" published! Earned +50 Credits! 🎉`);
   };
 
-  // Apply to Project Role
-  const handleApplyToRole = (project, roleName) => {
+  // Apply to Project Role (Pushed to Supabase Cloud)
+  const handleApplyToRole = async (project, roleName) => {
     if (!currentUser) return;
     const newApplicant = {
       id: `app-${Date.now()}`,
@@ -218,13 +240,13 @@ export default function App() {
     });
 
     setProjects(updatedProjects);
-    storageService.saveProjects(updatedProjects);
+    await storageService.saveProjects(updatedProjects);
 
     showToast(`Applied for ${roleName} in project "${project.title}"!`);
   };
 
   // Accept Project Applicant
-  const handleAcceptApplicant = (projectId, applicantObj) => {
+  const handleAcceptApplicant = async (projectId, applicantObj) => {
     const updatedProjects = projects.map(p => {
       if (p.id === projectId) {
         const updatedRoles = p.rolesNeeded.map(r => r.role === applicantObj.roleApplied ? { ...r, status: 'Filled' } : r);
@@ -234,13 +256,13 @@ export default function App() {
       return p;
     });
     setProjects(updatedProjects);
-    storageService.saveProjects(updatedProjects);
+    await storageService.saveProjects(updatedProjects);
 
     showToast(`Accepted ${applicantObj.studentName} onto the project team!`);
   };
 
   // Reject Project Applicant
-  const handleRejectApplicant = (projectId, applicantId) => {
+  const handleRejectApplicant = async (projectId, applicantId) => {
     const updatedProjects = projects.map(p => {
       if (p.id === projectId) {
         return { ...p, applicants: p.applicants.filter(a => a.id !== applicantId) };
@@ -248,26 +270,26 @@ export default function App() {
       return p;
     });
     setProjects(updatedProjects);
-    storageService.saveProjects(updatedProjects);
+    await storageService.saveProjects(updatedProjects);
 
     showToast(`Applicant declined.`);
   };
 
-  // Post New Project
-  const handleAddNewProject = (newProj) => {
+  // Post New Project (Pushed to Supabase Cloud)
+  const handleAddNewProject = async (newProj) => {
     if (!currentUser) return;
     const updatedProjects = [{ ...newProj, leadId: currentUser.id }, ...projects];
     setProjects(updatedProjects);
-    storageService.saveProjects(updatedProjects);
+    await storageService.saveProjects(updatedProjects);
 
     showToast(`Project "${newProj.title}" published!`);
   };
 
-  // Send Direct Message
-  const handleSendMessage = (msgObj) => {
+  // Send Direct Message (Pushed to Supabase Cloud)
+  const handleSendMessage = async (msgObj) => {
     const updatedMessages = [...messages, msgObj];
     setMessages(updatedMessages);
-    storageService.saveMessages(updatedMessages);
+    await storageService.saveMessages(updatedMessages);
   };
 
   // Reset Storage

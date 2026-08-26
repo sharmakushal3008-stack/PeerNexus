@@ -62,7 +62,6 @@ export const storageService = {
     this.notifySync();
   },
 
-  // Active Session User ID stored in sessionStorage so closing/exiting the browser forces re-login
   getActiveUserId() {
     if (typeof window === 'undefined') return null;
     localStorage.removeItem(KEYS.CURRENT_USER_ID);
@@ -86,7 +85,6 @@ export const storageService = {
     let users = this.getUsers();
     let matchedUser = null;
 
-    // 1. Try local cache first
     matchedUser = users.find(u => {
       const uId = (u.id || '').toLowerCase();
       const uEmail = (u.email || '').toLowerCase();
@@ -96,7 +94,6 @@ export const storageService = {
       return idMatch && passMatch;
     });
 
-    // 2. Query Supabase Cloud Database directly
     if (!matchedUser && isSupabaseConfigured && supabase) {
       try {
         const { data: cloudUsers } = await supabase
@@ -146,7 +143,7 @@ export const storageService = {
     return matchedUser;
   },
 
-  // Real Multi-Device Registration Method (No pre-filled dummy strings)
+  // Real Multi-Device Registration Method
   async registerUser(userData) {
     let users = this.getUsers();
     const cleanEmail = (userData.email || '').trim().toLowerCase();
@@ -205,7 +202,6 @@ export const storageService = {
     return newUser;
   },
 
-  // Real Logout Method
   logoutUser() {
     this.setActiveUserId(null);
   },
@@ -283,27 +279,54 @@ export const storageService = {
     this.notifySync();
   },
 
-  // --- TRADES & ESCROW ---
+  // --- TRADES & ESCROW (SUPABASE CLOUD INTEGRATION) ---
   getTradeRequests() {
     const data = localStorage.getItem(KEYS.TRADES);
     return data ? JSON.parse(data) : [];
   },
-  saveTradeRequests(trades) {
+  async saveTradeRequests(trades) {
     localStorage.setItem(KEYS.TRADES, JSON.stringify(trades));
     this.notifySync();
+    if (isSupabaseConfigured && supabase && trades.length > 0) {
+      try {
+        const latest = trades[0];
+        await supabase.from('trades').upsert({
+          id: latest.id,
+          sender_id: latest.senderId,
+          receiver_id: latest.receiverId,
+          skill_title: latest.skillOffered,
+          credits: latest.creditsRequired,
+          status: latest.status
+        });
+      } catch (e) {
+        console.warn('Cloud trade save error:', e);
+      }
+    }
   },
 
-  // --- DIRECT MESSAGES ---
+  // --- DIRECT MESSAGES (SUPABASE CLOUD INTEGRATION) ---
   getMessages() {
     const data = localStorage.getItem(KEYS.MESSAGES);
     return data ? JSON.parse(data) : [];
   },
-  saveMessages(messages) {
+  async saveMessages(messages) {
     localStorage.setItem(KEYS.MESSAGES, JSON.stringify(messages));
     this.notifySync();
+    if (isSupabaseConfigured && supabase && messages.length > 0) {
+      try {
+        const latest = messages[messages.length - 1];
+        await supabase.from('messages').upsert({
+          id: latest.id || `msg-${Date.now()}`,
+          sender_id: latest.senderId,
+          receiver_id: latest.receiverId,
+          content: latest.text || latest.content || ''
+        });
+      } catch (e) {
+        console.warn('Cloud message save error:', e);
+      }
+    }
   },
 
-  // Export / Import Token
   exportSyncToken() {
     const data = {
       users: this.getUsers(),
@@ -334,7 +357,6 @@ export const storageService = {
     }
   },
 
-  // Reset Data completely
   wipeData() {
     localStorage.removeItem(KEYS.USERS);
     localStorage.removeItem(KEYS.SKILLS);
@@ -358,7 +380,9 @@ export const storageService = {
   async syncFromCloud() {
     if (!isSupabaseConfigured || !supabase) return false;
     try {
+      // 1. Fetch Users
       const { data: cloudUsers } = await supabase.from('users').select('*');
+      let usersMap = {};
       if (cloudUsers && cloudUsers.length > 0) {
         const formattedUsers = cloudUsers.map(u => ({
           id: u.id,
@@ -377,16 +401,18 @@ export const storageService = {
           badges: u.badges || ["PeerNexus Member"]
         }));
 
+        formattedUsers.forEach(u => { usersMap[u.id] = u; });
         this.saveUsers(formattedUsers);
       }
 
+      // 2. Fetch Skill Offers
       const { data: skills } = await supabase.from('skills').select('*');
       if (skills && skills.length > 0) {
         const formattedSkills = skills.map(s => ({
           id: s.id,
           authorId: s.user_id,
-          authorName: s.user_name || 'Member',
-          authorAvatar: s.user_avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.user_name || 'peer')}`,
+          authorName: s.user_name || (usersMap[s.user_id] ? usersMap[s.user_id].name : 'Member'),
+          authorAvatar: s.user_avatar || (usersMap[s.user_id] ? usersMap[s.user_id].avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.user_name || 'peer')}`),
           skillOffered: s.title,
           skillWanted: 'Tech Assistance',
           category: s.category || 'Machine Learning',
@@ -398,12 +424,14 @@ export const storageService = {
         this.saveSkillOffers(formattedSkills);
       }
 
+      // 3. Fetch Projects
       const { data: projects } = await supabase.from('projects').select('*');
       if (projects && projects.length > 0) {
         const formattedProjects = projects.map(p => ({
           id: p.id,
           leadId: p.user_id,
-          leadName: p.owner || 'Project Lead',
+          leadName: p.owner || (usersMap[p.user_id] ? usersMap[p.user_id].name : 'Project Lead'),
+          leadAvatar: (usersMap[p.user_id] ? usersMap[p.user_id].avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(p.owner || 'lead')}`),
           title: p.title,
           category: p.category || 'Full-Stack',
           description: p.description || '',
@@ -415,6 +443,37 @@ export const storageService = {
         this.saveProjects(formattedProjects);
       }
 
+      // 4. Fetch Trade Requests
+      const { data: cloudTrades } = await supabase.from('trades').select('*');
+      if (cloudTrades && cloudTrades.length > 0) {
+        const formattedTrades = cloudTrades.map(t => ({
+          id: t.id,
+          senderId: t.sender_id,
+          senderName: usersMap[t.sender_id] ? usersMap[t.sender_id].name : 'Peer Sender',
+          receiverId: t.receiver_id,
+          receiverName: usersMap[t.receiver_id] ? usersMap[t.receiver_id].name : 'Peer Receiver',
+          skillOffered: t.skill_title || 'Skill Barter',
+          creditsRequired: t.credits || 40,
+          status: t.status || 'Pending Escrow',
+          createdAt: t.created_at || new Date().toISOString()
+        }));
+        localStorage.setItem(KEYS.TRADES, JSON.stringify(formattedTrades));
+      }
+
+      // 5. Fetch Messages
+      const { data: cloudMessages } = await supabase.from('messages').select('*');
+      if (cloudMessages && cloudMessages.length > 0) {
+        const formattedMessages = cloudMessages.map(m => ({
+          id: m.id,
+          senderId: m.sender_id,
+          receiverId: m.receiver_id,
+          text: m.content,
+          timestamp: m.timestamp || new Date().toISOString()
+        }));
+        localStorage.setItem(KEYS.MESSAGES, JSON.stringify(formattedMessages));
+      }
+
+      this.notifySync();
       return true;
     } catch (err) {
       console.warn('Cloud sync error:', err);
