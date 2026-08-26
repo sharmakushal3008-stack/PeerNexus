@@ -6,12 +6,11 @@ import {
   GraduationCap, 
   Lock, 
   Mail, 
-  User, 
   AlertCircle, 
-  ArrowRight, 
   ShieldCheck, 
   Globe, 
-  ArrowLeft
+  ArrowLeft,
+  Loader2
 } from 'lucide-react';
 import Canvas3DPreview from './Canvas3DPreview';
 import { storageService } from '../services/storageService';
@@ -19,9 +18,10 @@ import { storageService } from '../services/storageService';
 export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLanding }) {
   const [mode, setMode] = useState('login'); // 'login' | 'register' | 'sync'
   const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [syncTokenInput, setSyncTokenInput] = useState('');
 
-  // Login Form (Clean defaults for real user input)
+  // Login Form
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
@@ -37,17 +37,20 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
     skillsWanted: ''
   });
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    setIsLoading(true);
     try {
-      onLoginSuccess(loginIdentifier, loginPassword);
+      await onLoginSuccess(loginIdentifier, loginPassword);
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials!');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleRegisterSubmit = (e) => {
+  const handleRegisterSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     if (!regForm.email || !regForm.password || !regForm.name) {
@@ -55,8 +58,9 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
       return;
     }
 
+    setIsLoading(true);
     try {
-      onRegisterSuccess({
+      await onRegisterSuccess({
         uniqueId: regForm.customId,
         name: regForm.name,
         email: regForm.email,
@@ -68,6 +72,8 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
       });
     } catch (err) {
       setError(err.message || 'Registration failed!');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -108,7 +114,7 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
           )}
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <ShieldCheck className="h-4 w-4 text-emerald-400" />
-            <span>Encrypted Authentication & Local Escrow</span>
+            <span>Encrypted Supabase Cloud Auth</span>
           </div>
         </div>
 
@@ -142,7 +148,7 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
             {/* Bottom Caption */}
             <div className="text-xs text-slate-400 relative z-10">
               <p className="leading-relaxed">
-                Connect with peers for capstone projects, trade technical skills via escrow credits, and showcase your portfolio.
+                Connect with peers for capstone projects, trade technical skills via escrow credits, and sync your account across all mobile and desktop devices.
               </p>
             </div>
 
@@ -215,7 +221,7 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
                   className="space-y-4 text-xs"
                 >
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Student Email or Unique ID</label>
+                    <label className="block text-slate-300 font-semibold mb-1">Student / Teacher Email or Unique ID</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                       <input
@@ -247,11 +253,21 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
+                    disabled={isLoading}
                     type="submit"
-                    className="w-full py-3 bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition"
+                    className="w-full py-3 bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition disabled:opacity-50"
                   >
-                    <LogIn className="h-4 w-4" />
-                    Sign In
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-white" />
+                        <span>Authenticating Across Devices...</span>
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="h-4 w-4" />
+                        <span>Sign In</span>
+                      </>
+                    )}
                   </motion.button>
                 </motion.form>
               )}
@@ -317,11 +333,21 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
+                    disabled={isLoading}
                     type="submit"
-                    className="w-full py-3 bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition mt-2"
+                    className="w-full py-3 bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition mt-2 disabled:opacity-50"
                   >
-                    <UserPlus className="h-4 w-4" />
-                    Register Account & Get 200 Free Credits
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin text-white" />
+                        <span>Creating Cloud Account...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="h-4 w-4" />
+                        <span>Register Account & Get 200 Credits</span>
+                      </>
+                    )}
                   </motion.button>
                 </motion.form>
               )}

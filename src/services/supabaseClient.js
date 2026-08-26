@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Supabase URL & Anon Key with fallback production credentials for multi-device Vercel deployments
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bgqobfvbgkdyndamptum.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UDP7e3SW2XMiM8xaWPwRaw_yIhrhezu';
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 

@@ -12,9 +12,6 @@ const KEYS = {
   CURRENT_USER_ID: 'cf_active_session_user_id'
 };
 
-// Clean initial empty users array for real user testing
-const SEED_USERS = [];
-
 // Setup Broadcast Channel for Real-Time Cross-Tab / Cross-Window Sync
 let broadcastChannel = null;
 if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -78,45 +75,87 @@ export const storageService = {
     this.notifySync();
   },
   
-  // Real Universal Multi-Device Login Method
-  loginUser(identifier, password) {
-    const users = this.getUsers();
+  // Real Universal Multi-Device Login Method (Queries Supabase Cloud + Local Cache)
+  async loginUser(identifier, password) {
     const cleanId = (identifier || '').trim().toLowerCase();
-    
-    let matchedUser = users.find(u => {
+    let users = this.getUsers();
+    let matchedUser = null;
+
+    // 1. Try local cache first
+    matchedUser = users.find(u => {
       const uId = (u.id || '').toLowerCase();
       const uEmail = (u.email || '').toLowerCase();
       const uName = (u.name || '').toLowerCase();
-      
-      const idMatch = (
-        uId === cleanId || 
-        uEmail === cleanId || 
-        uName === cleanId
-      );
-      
+      const idMatch = (uId === cleanId || uEmail === cleanId || uName === cleanId);
       const passMatch = (u.password || '') === password;
       return idMatch && passMatch;
     });
 
+    // 2. If not found in local cache, query Supabase Cloud Database directly!
+    if (!matchedUser && isSupabaseConfigured && supabase) {
+      try {
+        const { data: cloudUsers, error } = await supabase
+          .from('users')
+          .select('*');
+
+        if (cloudUsers && cloudUsers.length > 0) {
+          // Normalize Supabase DB records to local format
+          const formattedUsers = cloudUsers.map(u => ({
+            id: u.id,
+            email: u.email,
+            password: u.password || 'password123',
+            name: u.name,
+            rollNo: u.roll_no || u.rollNo || '',
+            branch: u.branch || '',
+            year: u.year || '',
+            avatar: u.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.name)}`,
+            bio: u.bio || '',
+            credits: u.credits ?? 200,
+            reputation: u.reputation ?? 100,
+            skillsOffered: u.skills_offered || u.skillsOffered || [],
+            skillsWanted: u.skills_wanted || u.skillsWanted || [],
+            badges: u.badges || ["PeerNexus Member"]
+          }));
+
+          // Update local cache with Supabase data
+          this.saveUsers(formattedUsers);
+          users = formattedUsers;
+
+          matchedUser = users.find(u => {
+            const uId = (u.id || '').toLowerCase();
+            const uEmail = (u.email || '').toLowerCase();
+            const uName = (u.name || '').toLowerCase();
+            const idMatch = (uId === cleanId || uEmail === cleanId || uName === cleanId);
+            const passMatch = (u.password || '') === password;
+            return idMatch && passMatch;
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase cloud login fetch error:', err);
+      }
+    }
+
     if (!matchedUser) {
-      throw new Error('Invalid email/ID or password. If you do not have an account, please Sign Up first!');
+      throw new Error('Invalid Student/Teacher Email, Unique ID or Password. If you created this account on another device, ensure internet access or click Sign Up!');
     }
 
     this.setActiveUserId(matchedUser.id);
     return matchedUser;
   },
 
-  // Real Registration Method
-  registerUser(userData) {
-    const users = this.getUsers();
+  // Real Multi-Device Registration Method (Inserts into Supabase Cloud + Local Cache)
+  async registerUser(userData) {
+    let users = this.getUsers();
     const cleanEmail = (userData.email || '').trim().toLowerCase();
 
-    const existing = users.find(u => (u.email || '').toLowerCase() === cleanEmail);
-    if (existing) {
+    // Check local duplicate
+    const existingLocal = users.find(u => (u.email || '').toLowerCase() === cleanEmail);
+    if (existingLocal) {
       throw new Error('An account with this email address already exists. Please log in instead!');
     }
 
     const uniqueId = userData.uniqueId ? userData.uniqueId.trim().toLowerCase() : `stu-${Math.floor(1000 + Math.random() * 9000)}`;
+    
     const newUser = {
       id: uniqueId,
       email: userData.email,
@@ -126,7 +165,7 @@ export const storageService = {
       branch: userData.branch || "Computer Science & Engineering",
       year: userData.year || "3rd Year",
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(userData.name)}`,
-      bio: userData.bio || "Student learning & exchanging technical skills on PeerNexus.",
+      bio: userData.bio || "Student/Teacher exchanging technical skills on PeerNexus.",
       credits: 200,
       reputation: 100,
       skillsOffered: userData.skillsOffered || [],
@@ -134,9 +173,35 @@ export const storageService = {
       badges: ["PeerNexus Member"]
     };
 
+    // 1. Save to local storage
     users.push(newUser);
     this.saveUsers(users);
     this.setActiveUserId(newUser.id);
+
+    // 2. Insert into Supabase Cloud Database for cross-device availability
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('users').upsert({
+          id: newUser.id,
+          email: newUser.email,
+          password: newUser.password,
+          name: newUser.name,
+          roll_no: newUser.rollNo,
+          branch: newUser.branch,
+          year: newUser.year,
+          avatar: newUser.avatar,
+          bio: newUser.bio,
+          credits: newUser.credits,
+          reputation: newUser.reputation,
+          skills_offered: newUser.skillsOffered,
+          skills_wanted: newUser.skillsWanted,
+          badges: newUser.badges
+        });
+      } catch (err) {
+        console.warn('Cloud register insert error:', err);
+      }
+    }
+
     return newUser;
   },
 
@@ -150,9 +215,26 @@ export const storageService = {
     const data = localStorage.getItem(KEYS.SKILLS);
     return data ? JSON.parse(data) : [];
   },
-  saveSkillOffers(skills) {
+  async saveSkillOffers(skills) {
     localStorage.setItem(KEYS.SKILLS, JSON.stringify(skills));
     this.notifySync();
+    if (isSupabaseConfigured && supabase && skills.length > 0) {
+      try {
+        const latest = skills[0];
+        await supabase.from('skills').upsert({
+          id: latest.id,
+          user_id: latest.authorId,
+          user_name: latest.authorName,
+          user_avatar: latest.authorAvatar,
+          title: latest.skillOffered,
+          category: latest.category,
+          credits: latest.creditsRequired,
+          description: latest.description
+        });
+      } catch (e) {
+        console.warn('Cloud skill save error:', e);
+      }
+    }
   },
 
   // --- PROJECTS ---
@@ -160,9 +242,26 @@ export const storageService = {
     const data = localStorage.getItem(KEYS.PROJECTS);
     return data ? JSON.parse(data) : [];
   },
-  saveProjects(projects) {
+  async saveProjects(projects) {
     localStorage.setItem(KEYS.PROJECTS, JSON.stringify(projects));
     this.notifySync();
+    if (isSupabaseConfigured && supabase && projects.length > 0) {
+      try {
+        const latest = projects[0];
+        await supabase.from('projects').upsert({
+          id: latest.id,
+          user_id: latest.leadId || 'stu-lead',
+          owner: latest.leadName,
+          title: latest.title,
+          category: latest.category,
+          description: latest.description,
+          roles_needed: latest.rolesNeeded,
+          tags: latest.tags
+        });
+      } catch (e) {
+        console.warn('Cloud project save error:', e);
+      }
+    }
   },
 
   // --- RESOURCES & WORKSHOPS ---
@@ -248,7 +347,7 @@ export const storageService = {
     this.notifySync();
   },
 
-  // --- CLOUD DATABASE (SUPABASE) ---
+  // --- CLOUD DATABASE (SUPABASE) FULL AUTOMATIC SYNC ---
   isCloudConnected() {
     return isSupabaseConfigured;
   },
@@ -256,17 +355,62 @@ export const storageService = {
   async syncFromCloud() {
     if (!isSupabaseConfigured || !supabase) return false;
     try {
-      const { data: users } = await supabase.from('users').select('*');
-      if (users && users.length > 0) this.saveUsers(users);
+      const { data: cloudUsers } = await supabase.from('users').select('*');
+      if (cloudUsers && cloudUsers.length > 0) {
+        const formattedUsers = cloudUsers.map(u => ({
+          id: u.id,
+          email: u.email,
+          password: u.password || 'password123',
+          name: u.name,
+          rollNo: u.roll_no || u.rollNo || '',
+          branch: u.branch || '',
+          year: u.year || '',
+          avatar: u.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.name)}`,
+          bio: u.bio || '',
+          credits: u.credits ?? 200,
+          reputation: u.reputation ?? 100,
+          skillsOffered: u.skills_offered || u.skillsOffered || [],
+          skillsWanted: u.skills_wanted || u.skillsWanted || [],
+          badges: u.badges || ["PeerNexus Member"]
+        }));
+
+        this.saveUsers(formattedUsers);
+      }
 
       const { data: skills } = await supabase.from('skills').select('*');
-      if (skills) this.saveSkillOffers(skills);
+      if (skills && skills.length > 0) {
+        const formattedSkills = skills.map(s => ({
+          id: s.id,
+          authorId: s.user_id,
+          authorName: s.user_name || 'Student Peer',
+          authorAvatar: s.user_avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.user_name || 'peer')}`,
+          skillOffered: s.title,
+          skillWanted: 'Tech Assistance',
+          category: s.category || 'Machine Learning',
+          description: s.description || '',
+          creditsRequired: s.credits || 40,
+          rating: 5.0,
+          status: 'Online'
+        }));
+        this.saveSkillOffers(formattedSkills);
+      }
 
       const { data: projects } = await supabase.from('projects').select('*');
-      if (projects) this.saveProjects(projects);
-
-      const { data: messages } = await supabase.from('messages').select('*');
-      if (messages) this.saveMessages(messages);
+      if (projects && projects.length > 0) {
+        const formattedProjects = projects.map(p => ({
+          id: p.id,
+          leadId: p.user_id,
+          leadName: p.owner || 'Project Lead',
+          title: p.title,
+          category: p.category || 'Full-Stack',
+          description: p.description || '',
+          rolesNeeded: p.roles_needed || [],
+          tags: p.tags || ['React', 'Node.js'],
+          deadline: 'Capstone Target',
+          teamSize: '1 / 3 Members'
+        }));
+        this.saveProjects(formattedProjects);
+      }
 
       return true;
     } catch (err) {

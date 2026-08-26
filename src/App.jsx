@@ -38,6 +38,20 @@ export default function App() {
   // Derived Active User Object
   const currentUser = users.find(u => u.id === activeUserId);
 
+  // Auto-sync from Supabase Cloud on App Startup (for mobile & multi-device sync)
+  useEffect(() => {
+    async function initCloudSync() {
+      await storageService.syncFromCloud();
+      setUsers(storageService.getUsers());
+      setActiveUserId(storageService.getActiveUserId());
+      setSkillOffers(storageService.getSkillOffers());
+      setProjects(storageService.getProjects());
+      setTradeRequests(storageService.getTradeRequests());
+      setMessages(storageService.getMessages());
+    }
+    initCloudSync();
+  }, []);
+
   // Real-Time Cross-Tab / Cross-Window Sync Listener
   useEffect(() => {
     const unsubscribe = storageService.subscribeToSync(() => {
@@ -64,17 +78,17 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Real Login Handler
-  const handleLoginSuccess = (identifier, password) => {
-    const loggedUser = storageService.loginUser(identifier, password);
+  // Real Async Login Handler
+  const handleLoginSuccess = async (identifier, password) => {
+    const loggedUser = await storageService.loginUser(identifier, password);
     setUsers(storageService.getUsers());
     setActiveUserId(loggedUser.id);
     showToast(`Welcome back, ${loggedUser.name}! 👋`);
   };
 
-  // Real Registration Handler
-  const handleRegisterSuccess = (newUserData) => {
-    const newUser = storageService.registerUser(newUserData);
+  // Real Async Registration Handler
+  const handleRegisterSuccess = async (newUserData) => {
+    const newUser = await storageService.registerUser(newUserData);
     setUsers(storageService.getUsers());
     setActiveUserId(newUser.id);
     showToast(`Welcome to PeerNexus, ${newUser.name}! (ID: ${newUser.id}) 🎉`);
@@ -167,7 +181,10 @@ export default function App() {
   // Post Skill Offer
   const handleAddNewSkillOffer = (newOffer) => {
     if (!currentUser) return;
-    setSkillOffers([newOffer, ...skillOffers]);
+    const updatedSkills = [newOffer, ...skillOffers];
+    setSkillOffers(updatedSkills);
+    storageService.saveSkillOffers(updatedSkills);
+
     setUsers(users.map(u => {
       if (u.id === currentUser.id) {
         return {
@@ -193,50 +210,64 @@ export default function App() {
       skills: currentUser.skillsOffered
     };
 
-    setProjects(projects.map(p => {
+    const updatedProjects = projects.map(p => {
       if (p.id === project.id) {
         return { ...p, applicants: [...(p.applicants || []), newApplicant] };
       }
       return p;
-    }));
+    });
+
+    setProjects(updatedProjects);
+    storageService.saveProjects(updatedProjects);
 
     showToast(`Applied for ${roleName} in project "${project.title}"!`);
   };
 
   // Accept Project Applicant
   const handleAcceptApplicant = (projectId, applicantObj) => {
-    setProjects(projects.map(p => {
+    const updatedProjects = projects.map(p => {
       if (p.id === projectId) {
         const updatedRoles = p.rolesNeeded.map(r => r.role === applicantObj.roleApplied ? { ...r, status: 'Filled' } : r);
         const updatedApplicants = p.applicants.filter(a => a.id !== applicantObj.id);
         return { ...p, rolesNeeded: updatedRoles, applicants: updatedApplicants };
       }
       return p;
-    }));
+    });
+    setProjects(updatedProjects);
+    storageService.saveProjects(updatedProjects);
+
     showToast(`Accepted ${applicantObj.studentName} onto the project team!`);
   };
 
   // Reject Project Applicant
   const handleRejectApplicant = (projectId, applicantId) => {
-    setProjects(projects.map(p => {
+    const updatedProjects = projects.map(p => {
       if (p.id === projectId) {
         return { ...p, applicants: p.applicants.filter(a => a.id !== applicantId) };
       }
       return p;
-    }));
+    });
+    setProjects(updatedProjects);
+    storageService.saveProjects(updatedProjects);
+
     showToast(`Applicant declined.`);
   };
 
   // Post New Project
   const handleAddNewProject = (newProj) => {
     if (!currentUser) return;
-    setProjects([{ ...newProj, leadId: currentUser.id }, ...projects]);
+    const updatedProjects = [{ ...newProj, leadId: currentUser.id }, ...projects];
+    setProjects(updatedProjects);
+    storageService.saveProjects(updatedProjects);
+
     showToast(`Project "${newProj.title}" published!`);
   };
 
   // Send Direct Message
   const handleSendMessage = (msgObj) => {
-    setMessages([...messages, msgObj]);
+    const updatedMessages = [...messages, msgObj];
+    setMessages(updatedMessages);
+    storageService.saveMessages(updatedMessages);
   };
 
   // Reset Storage
