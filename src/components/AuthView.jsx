@@ -12,7 +12,7 @@ import {
   ArrowLeft,
   Loader2
 } from 'lucide-react';
-import Canvas3DPreview from './Canvas3DPreview';
+import InteractiveMouseCanvas from './InteractiveMouseCanvas';
 import { storageService } from '../services/storageService';
 
 export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLanding }) {
@@ -95,10 +95,7 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-4 md:p-8 overflow-y-auto selection:bg-cyan-500 selection:text-slate-950">
-      
-      {/* Background Animated Gradient Lights */}
-      <div className="absolute top-1/4 left-1/4 h-96 w-96 rounded-full bg-cyan-600/20 blur-3xl pointer-events-none animate-pulse" />
-      <div className="absolute bottom-1/4 right-1/4 h-96 w-96 rounded-full bg-purple-600/20 blur-3xl pointer-events-none animate-pulse" />
+      <InteractiveMouseCanvas className="z-0" />
 
       {/* Main Container */}
       <div className="max-w-5xl w-full flex flex-col space-y-4 z-10">
@@ -111,7 +108,7 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
               className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-cyan-400 transition group"
             >
               <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-              <span>Back to 3D Landing Page</span>
+              <span>Back to Landing Page</span>
             </button>
           )}
           <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -142,14 +139,11 @@ export default function AuthView({ onLoginSuccess, onRegisterSuccess, onBackToLa
               </div>
             </div>
 
-            {/* 3D Canvas Preview */}
-            <div className="my-4 h-[340px] w-full">
-              <Canvas3DPreview />
-            </div>
-
-            {/* Bottom Caption */}
-            <div className="text-xs text-slate-400 relative z-10">
-              <p className="leading-relaxed">
+            <div className="my-auto py-8 space-y-4">
+              <h2 className="text-xl font-bold text-white leading-tight">
+                Empowering Students to Trade Skills & Build Capstones Together
+              </h2>
+              <p className="text-xs text-slate-400 leading-relaxed">
                 Connect with students and teachers for capstone projects, trade technical skills via escrow credits, and sync your account across all mobile and desktop devices.
               </p>
             </div>

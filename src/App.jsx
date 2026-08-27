@@ -169,7 +169,10 @@ export default function App() {
 
   // Complete Trade Session & Transfer Credits (Pushed to Supabase Cloud)
   const handleCompleteTrade = async (tradeObj, rating = 5) => {
-    const updatedTrades = tradeRequests.filter(t => t.id !== tradeObj.id);
+    const updatedTrades = tradeRequests.map(t => {
+      if (t.id === tradeObj.id) return { ...t, status: 'Completed' };
+      return t;
+    });
     setTradeRequests(updatedTrades);
     await storageService.saveTradeRequests(updatedTrades);
     setActiveSessionTrade(null);
@@ -192,7 +195,7 @@ export default function App() {
     });
 
     setUsers(updatedUsers);
-    storageService.saveUsers(updatedUsers);
+    await storageService.saveUsers(updatedUsers);
 
     showToast(`Session completed! ${tradeObj.creditsRequired} Cr released to recipient.`);
   };

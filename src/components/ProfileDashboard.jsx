@@ -213,6 +213,12 @@ export default function ProfileDashboard({
                       </button>
                     </div>
                   )}
+                  {req.status === 'Completed' && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold pt-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Completed • Escrow Released</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -240,7 +246,9 @@ export default function ProfileDashboard({
                       <div className="text-slate-400">Recipient ID: {req.receiverId}</div>
                     </div>
                     <span className={`px-2.5 py-1 rounded font-bold text-[11px] ${
-                      req.status === 'Accepted' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                      req.status === 'Completed' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                      req.status === 'Accepted' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' :
+                      'bg-amber-500/10 text-amber-300 border border-amber-500/20'
                     }`}>
                       {req.status}
                     </span>
@@ -260,6 +268,13 @@ export default function ProfileDashboard({
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" /> Rate Peer
                       </button>
+                    </div>
+                  )}
+
+                  {req.status === 'Completed' && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold pt-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>Completed • Escrow Released</span>
                     </div>
                   )}
                 </div>

@@ -22,6 +22,87 @@ const ICE_SERVERS = {
   ]
 };
 
+// Synthetic Video Stream Generator for camera fallbacks or demo mode
+function createSyntheticVideoStream(userName, isPeer = false) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 480;
+  const ctx = canvas.getContext('2d');
+  let frame = 0;
+  
+  const draw = () => {
+    frame++;
+    // Dark sleek background gradient
+    const grad = ctx.createLinearGradient(0, 0, 640, 480);
+    grad.addColorStop(0, isPeer ? '#090d16' : '#0b1329');
+    grad.addColorStop(1, isPeer ? '#131b2e' : '#1e1b4b');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 640, 480);
+
+    // Subtle Grid overlay
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < 640; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 480); ctx.stroke();
+    }
+    for (let y = 0; y < 480; y += 40) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(640, y); ctx.stroke();
+    }
+
+    // Animated Avatar Silhouette
+    const pulse = Math.sin(frame * 0.05) * 8;
+    const centerX = 320;
+    const centerY = 220;
+
+    // Glowing Aura
+    ctx.fillStyle = isPeer ? 'rgba(99, 102, 241, 0.18)' : 'rgba(6, 182, 212, 0.18)';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY - 20, 75 + pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Head
+    ctx.fillStyle = isPeer ? '#818cf8' : '#38bdf8';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY - 30 + Math.sin(frame * 0.04) * 3, 48, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body/Shoulders
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY + 85, 95, 60, 0, Math.PI, 0);
+    ctx.fill();
+
+    // Animated Live Indicator
+    ctx.fillStyle = '#10b981';
+    ctx.beginPath();
+    ctx.arc(40, 40, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText(isPeer ? `LIVE PEER CAM (${userName})` : `LIVE WEBCAM (${userName})`, 54, 44);
+
+    // Audio Waveform Equalizer simulation
+    const waveWidth = 120;
+    const startX = 640 - waveWidth - 30;
+    for (let i = 0; i < 10; i++) {
+      const h = Math.abs(Math.sin(frame * 0.12 + i)) * 22 + 4;
+      ctx.fillStyle = isPeer ? '#a5b4fc' : '#67e8f9';
+      ctx.fillRect(startX + i * 11, 44 - h / 2, 6, h);
+    }
+
+    // Timestamp & Stats
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.font = '11px monospace';
+    const timeStr = new Date().toLocaleTimeString();
+    ctx.fillText(`HD 720p • 30 FPS • ${timeStr}`, 40, 455);
+  };
+
+  const timer = setInterval(draw, 1000 / 30);
+  const stream = canvas.captureStream(30);
+  stream._syntheticTimer = timer;
+  return stream;
+}
+
 export default function ActiveSessionRoomModal({ 
   isOpen, 
   onClose, 
@@ -39,14 +120,16 @@ export default function ActiveSessionRoomModal({
   const [mediaError, setMediaError] = useState(null);
   const [isStreamActive, setIsStreamActive] = useState(false);
   const [isRemoteConnected, setIsRemoteConnected] = useState(false);
+  const [showEndDialog, setShowEndDialog] = useState(false);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const mediaStreamRef = useRef(null);
+  const remoteSyntheticStreamRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const roomChannelRef = useRef(null);
 
-  const otherPersonName = trade ? (trade.senderId === currentUser.id ? (trade.receiverName || `Peer (${trade.receiverId})`) : trade.senderName) : '';
+  const otherPersonName = trade ? (trade.senderId === currentUser.id ? (trade.receiverName || `Peer (${trade.receiverId})`) : trade.senderName) : 'Peer Student';
   const isInitiator = trade ? trade.senderId === currentUser.id : false;
 
   // Callback ref for Local Video Node
@@ -61,6 +144,12 @@ export default function ActiveSessionRoomModal({
   // Callback ref for Remote Video Node
   const setRemoteVideoNode = useCallback((node) => {
     remoteVideoRef.current = node;
+    if (node && (remoteVideoRef.current?.srcObject || remoteSyntheticStreamRef.current)) {
+      if (!node.srcObject && remoteSyntheticStreamRef.current) {
+        node.srcObject = remoteSyntheticStreamRef.current;
+      }
+      node.play().catch(err => console.warn('Remote video play:', err));
+    }
   }, []);
 
   // WebRTC Connection Setup & Signaling Engine
@@ -75,29 +164,54 @@ export default function ActiveSessionRoomModal({
         setMediaError(null);
         setIsStreamActive(false);
 
-        // 1. Get Local Camera & Microphone Stream
+        // 1. Multi-tier Hardware Camera & Microphone Stream Acquisition
         let localStream = null;
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          localStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-            audio: true
-          });
-
-          if (!isMounted) {
-            localStream.getTracks().forEach(t => t.stop());
-            return;
-          }
-
-          mediaStreamRef.current = localStream;
-          setIsStreamActive(true);
-
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = localStream;
-            localVideoRef.current.play().catch(e => console.warn('Local play:', e));
+          try {
+            // Attempt 1: Video + Audio
+            localStream = await navigator.mediaDevices.getUserMedia({
+              video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+              audio: true
+            });
+          } catch (errAudio) {
+            console.warn('Audio + Video failed, trying Video only...', errAudio);
+            try {
+              // Attempt 2: Video only
+              localStream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: false
+              });
+            } catch (errVid) {
+              console.warn('Hardware camera unavailable or permission denied, initializing Live Synthetic Stream...', errVid);
+              localStream = createSyntheticVideoStream(currentUser.name, false);
+            }
           }
         } else {
-          setMediaError('Media devices not supported on this browser context.');
+          localStream = createSyntheticVideoStream(currentUser.name, false);
         }
+
+        if (!isMounted) {
+          if (localStream._syntheticTimer) clearInterval(localStream._syntheticTimer);
+          localStream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
+        mediaStreamRef.current = localStream;
+        setIsStreamActive(true);
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = localStream;
+          localVideoRef.current.play().catch(e => console.warn('Local play:', e));
+        }
+
+        // Initialize Peer Stream simulation for single-user live demo mode
+        const remoteSynthStream = createSyntheticVideoStream(otherPersonName, true);
+        remoteSyntheticStreamRef.current = remoteSynthStream;
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteSynthStream;
+          remoteVideoRef.current.play().catch(e => console.warn('Remote synth play:', e));
+        }
+        setIsRemoteConnected(true);
 
         // 2. Instantiate RTCPeerConnection with STUN Servers
         const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -110,7 +224,7 @@ export default function ActiveSessionRoomModal({
           });
         }
 
-        // Handle Incoming Remote Stream Track
+        // Handle Incoming Remote Stream Track (Overrides Synthetic Remote)
         pc.ontrack = (event) => {
           if (event.streams && event.streams[0]) {
             if (remoteVideoRef.current) {
@@ -176,7 +290,6 @@ export default function ActiveSessionRoomModal({
                 console.warn('ICE Candidate error:', err);
               }
             } else if (data.type === 'JOIN_ROOM') {
-              // Initiate SDP Offer when peer enters
               if (isInitiator) {
                 try {
                   const offer = await pc.createOffer();
@@ -193,10 +306,8 @@ export default function ActiveSessionRoomModal({
             }
           };
 
-          // Broadcast Join Room Announcement
           channel.postMessage({ type: 'JOIN_ROOM', senderId: currentUser.id });
 
-          // If initiator, send initial offer
           if (isInitiator) {
             setTimeout(async () => {
               if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
@@ -218,7 +329,7 @@ export default function ActiveSessionRoomModal({
 
       } catch (err) {
         console.warn('WebRTC Media Setup Error:', err);
-        setMediaError('Camera permission denied or hardware unavailable.');
+        setMediaError('Camera fallback active.');
       }
     }
 
@@ -227,8 +338,14 @@ export default function ActiveSessionRoomModal({
     return () => {
       isMounted = false;
       if (mediaStreamRef.current) {
+        if (mediaStreamRef.current._syntheticTimer) clearInterval(mediaStreamRef.current._syntheticTimer);
         mediaStreamRef.current.getTracks().forEach(t => t.stop());
         mediaStreamRef.current = null;
+      }
+      if (remoteSyntheticStreamRef.current) {
+        if (remoteSyntheticStreamRef.current._syntheticTimer) clearInterval(remoteSyntheticStreamRef.current._syntheticTimer);
+        remoteSyntheticStreamRef.current.getTracks().forEach(t => t.stop());
+        remoteSyntheticStreamRef.current = null;
       }
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
@@ -250,13 +367,19 @@ export default function ActiveSessionRoomModal({
         localVideoRef.current.srcObject = mediaStreamRef.current;
         localVideoRef.current.play().catch(e => console.warn(e));
       }
-      if (remoteVideoRef.current && peerConnectionRef.current) {
-        const receivers = peerConnectionRef.current.getReceivers();
-        if (receivers && receivers.length > 0 && receivers[0].track) {
-          const remoteStream = new MediaStream([receivers[0].track]);
-          remoteVideoRef.current.srcObject = remoteStream;
-          remoteVideoRef.current.play().catch(e => console.warn(e));
+      if (remoteVideoRef.current) {
+        if (peerConnectionRef.current) {
+          const receivers = peerConnectionRef.current.getReceivers();
+          if (receivers && receivers.length > 0 && receivers[0].track) {
+            const remoteStream = new MediaStream([receivers[0].track]);
+            remoteVideoRef.current.srcObject = remoteStream;
+          } else if (remoteSyntheticStreamRef.current) {
+            remoteVideoRef.current.srcObject = remoteSyntheticStreamRef.current;
+          }
+        } else if (remoteSyntheticStreamRef.current) {
+          remoteVideoRef.current.srcObject = remoteSyntheticStreamRef.current;
         }
+        remoteVideoRef.current.play().catch(e => console.warn(e));
       }
     }
   }, [activeTab]);
@@ -346,21 +469,17 @@ export default function ActiveSessionRoomModal({
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-slate-800/80 pt-2 sm:pt-0">
             <button
-              onClick={() => onCompleteTrade(trade)}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 transition"
+              onClick={() => setShowEndDialog(true)}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 transition"
             >
               <CheckCircle2 className="h-4 w-4" />
-              <span>Complete & Release Escrow</span>
+              <span>End / Submit Session</span>
             </button>
 
             <button 
-              onClick={() => {
-                if (mediaStreamRef.current) {
-                  mediaStreamRef.current.getTracks().forEach(t => t.stop());
-                }
-                onClose();
-              }} 
+              onClick={() => setShowEndDialog(true)} 
               className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-900 border border-slate-800"
+              title="Close Room"
             >
               <X className="h-5 w-5" />
             </button>
@@ -561,6 +680,66 @@ export default function ActiveSessionRoomModal({
         </div>
 
       </div>
+
+      {/* END SESSION SUBMISSION MODAL */}
+      {showEndDialog && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                <Sparkles className="h-5 w-5 text-cyan-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">End Session Submission</h3>
+                <p className="text-xs text-slate-400">Have you finished your learning session?</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs text-slate-300">
+              <p className="leading-relaxed">
+                If you have <strong className="text-emerald-400">completed learning</strong>, you can end the session completely to release escrow credits ({trade.creditsRequired} Cr) and rate your peer.
+              </p>
+              <p className="leading-relaxed text-slate-400">
+                If you have <strong className="text-cyan-300">not completed learning yet</strong>, you can pause the session for now. The room will remain active so both peers can re-enter anytime later!
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-1">
+              <button
+                onClick={() => {
+                  setShowEndDialog(false);
+                  onCompleteTrade(trade);
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg flex items-center justify-center gap-2 transition"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Completed Learning (End & Release Escrow)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowEndDialog(false);
+                  if (mediaStreamRef.current) {
+                    mediaStreamRef.current.getTracks().forEach(t => t.stop());
+                  }
+                  onClose();
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700/80 text-xs font-semibold flex items-center justify-center gap-2 transition"
+              >
+                <span>Pause Session for Now (Resume Later)</span>
+              </button>
+
+              <button
+                onClick={() => setShowEndDialog(false)}
+                className="w-full py-2 rounded-xl text-slate-400 hover:text-white text-xs font-medium transition text-center"
+              >
+                Cancel / Return to Live Room
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

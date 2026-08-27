@@ -57,9 +57,32 @@ export const storageService = {
     }
   },
 
-  saveUsers(users) {
+  async saveUsers(users) {
     localStorage.setItem(KEYS.USERS, JSON.stringify(users));
     this.notifySync();
+    if (isSupabaseConfigured && supabase && users.length > 0) {
+      try {
+        const payload = users.map(u => ({
+          id: u.id,
+          email: u.email,
+          password: u.password || '',
+          name: u.name || '',
+          roll_no: u.rollNo || '',
+          branch: u.branch || '',
+          year: u.year || '',
+          avatar: u.avatar || '',
+          bio: u.bio || '',
+          credits: u.credits ?? 200,
+          reputation: u.reputation ?? 100,
+          skills_offered: u.skillsOffered || [],
+          skills_wanted: u.skillsWanted || [],
+          badges: u.badges || ["PeerNexus Member"]
+        }));
+        await supabase.from('users').upsert(payload);
+      } catch (e) {
+        console.warn('Cloud users save error:', e);
+      }
+    }
   },
 
   getActiveUserId() {
@@ -287,17 +310,19 @@ export const storageService = {
   async saveTradeRequests(trades) {
     localStorage.setItem(KEYS.TRADES, JSON.stringify(trades));
     this.notifySync();
-    if (isSupabaseConfigured && supabase && trades.length > 0) {
+    if (isSupabaseConfigured && supabase) {
       try {
-        const latest = trades[0];
-        await supabase.from('trades').upsert({
-          id: latest.id,
-          sender_id: latest.senderId,
-          receiver_id: latest.receiverId,
-          skill_title: latest.skillOffered,
-          credits: latest.creditsRequired,
-          status: latest.status
-        });
+        if (trades.length > 0) {
+          const payload = trades.map(t => ({
+            id: t.id,
+            sender_id: t.senderId,
+            receiver_id: t.receiverId,
+            skill_title: t.skillOffered,
+            credits: t.creditsRequired,
+            status: t.status
+          }));
+          await supabase.from('trades').upsert(payload);
+        }
       } catch (e) {
         console.warn('Cloud trade save error:', e);
       }
