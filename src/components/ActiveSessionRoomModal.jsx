@@ -10,7 +10,12 @@ import {
   CheckCircle2, 
   X, 
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Copy,
+  Save,
+  LogOut,
+  FileText
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { storageService } from '../services/storageService';
@@ -123,6 +128,8 @@ export default function ActiveSessionRoomModal({
   const [isStreamActive, setIsStreamActive] = useState(false);
   const [isRemoteConnected, setIsRemoteConnected] = useState(false);
   const [showEndDialog, setShowEndDialog] = useState(false);
+  const [peerNotice, setPeerNotice] = useState(null);
+  const [exportNotice, setExportNotice] = useState(null);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -173,10 +180,16 @@ export default function ActiveSessionRoomModal({
     } catch (e) {}
   }, [trade?.id]);
 
-  // Process Incoming WebRTC Signals & Collaborative Notes
+  // Process Incoming WebRTC Signals, Leave Signals & Collaborative Notes
   const handleIncomingSignal = useCallback(async (data) => {
     if (!data || data.senderId === currentUser.id) return;
     const pc = peerConnectionRef.current;
+
+    if (data.type === 'LEAVE_ROOM') {
+      setIsRemoteConnected(false);
+      setPeerNotice(`${data.senderName || otherPersonName} has left the session room.`);
+      return;
+    }
 
     if (data.type === 'NOTE_UPDATE') {
       if (data.timestamp > (lastNoteTimeRef.current || 0)) {
@@ -412,6 +425,7 @@ export default function ActiveSessionRoomModal({
 
     return () => {
       isMounted = false;
+      sendSignal({ type: 'LEAVE_ROOM', senderId: currentUser.id, senderName: currentUser.name });
       if (mediaStreamRef.current) {
         if (mediaStreamRef.current._syntheticTimer) clearInterval(mediaStreamRef.current._syntheticTimer);
         mediaStreamRef.current.getTracks().forEach(t => t.stop());
@@ -438,6 +452,58 @@ export default function ActiveSessionRoomModal({
       setIsRemoteConnected(false);
     };
   }, [isOpen, trade?.id, currentUser.id, handleIncomingSignal, otherPersonName, sendSignal]);
+
+  // Download Notes as .md File
+  const handleDownloadNotes = () => {
+    try {
+      const topicName = (trade.skillOffered || 'Session').replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `PeerNexus_Notes_${topicName}.md`;
+      const blob = new Blob([notesText], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setExportNotice('Downloaded notes file (.md)!');
+      setTimeout(() => setExportNotice(null), 3000);
+    } catch (e) {
+      console.warn('Download notes error:', e);
+    }
+  };
+
+  // Export Notes to Local Storage Library
+  const handleSaveNotesToLibrary = () => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('cf_user_notes_library') || '[]');
+      const newNote = {
+        id: `note-${Date.now()}`,
+        topic: trade.skillOffered || 'Skill Barter Session',
+        peer: otherPersonName,
+        content: notesText,
+        savedAt: new Date().toLocaleString()
+      };
+      localStorage.setItem('cf_user_notes_library', JSON.stringify([newNote, ...existing]));
+      storageService.notifySync();
+
+      setExportNotice('Saved notes to your Local Storage Library!');
+      setTimeout(() => setExportNotice(null), 3000);
+    } catch (e) {
+      console.warn('Save notes library error:', e);
+    }
+  };
+
+  // Copy Notes to Clipboard
+  const handleCopyNotesToClipboard = () => {
+    try {
+      navigator.clipboard.writeText(notesText);
+      setExportNotice('Copied notes to clipboard!');
+      setTimeout(() => setExportNotice(null), 3000);
+    } catch (e) {}
+  };
 
   // Re-bind remote & local video tags when tab switches back to 'video'
   useEffect(() => {
@@ -643,8 +709,20 @@ export default function ActiveSessionRoomModal({
         </div>
 
         {/* MAIN BODY */}
-        <div className="flex-1 overflow-hidden bg-slate-950/40 p-3 sm:p-4">
+        <div className="flex-1 overflow-hidden bg-slate-950/40 p-3 sm:p-4 flex flex-col">
           
+          {peerNotice && (
+            <div className="p-3 bg-amber-950/90 border border-amber-500/50 rounded-2xl text-amber-200 text-xs font-semibold flex items-center justify-between mb-3 shadow-lg shrink-0">
+              <div className="flex items-center gap-2">
+                <LogOut className="h-4 w-4 text-amber-400 shrink-0" />
+                <span>{peerNotice}</span>
+              </div>
+              <button onClick={() => setPeerNotice(null)} className="text-amber-400 hover:text-white p-1">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
           {/* TAB 1: VIDEO CALL ROOM WITH BI-DIRECTIONAL WEBRTC PEER STREAMS */}
           {activeTab === 'video' && (
             <div className="h-full flex flex-col justify-between space-y-3">
@@ -744,14 +822,60 @@ export default function ActiveSessionRoomModal({
 
           {/* TAB 2: LIVE SHARED CODE & NOTES */}
           {activeTab === 'scratchpad' && (
-            <div className="h-full flex flex-col space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="font-semibold text-slate-200 flex items-center gap-1.5">
-                  <Code className="h-4 w-4 text-cyan-400" />
-                  Live Collaborative Code & Notes Scratchpad
-                </span>
-                <span className="text-emerald-400 font-mono text-[10px]">● Live Peer Sync Active</span>
+            <div className="h-full flex flex-col space-y-3">
+              
+              {/* Scratchpad Header & Export Actions Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950 p-2.5 rounded-2xl border border-slate-800 text-xs">
+                <div className="flex items-center gap-2">
+                  <Code className="h-4 w-4 text-cyan-400 shrink-0" />
+                  <span className="font-semibold text-slate-200">Live Collaborative Code & Notes</span>
+                  <span className="text-emerald-400 font-mono text-[10px] hidden sm:inline">● Live Peer Sync</span>
+                </div>
+
+                {/* Export Action Buttons */}
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <button
+                    onClick={handleCopyNotesToClipboard}
+                    className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-xl text-slate-300 hover:text-white text-[11px] font-semibold flex items-center gap-1.5 transition shadow-sm"
+                    title="Copy Notes to Clipboard"
+                  >
+                    <Copy className="h-3.5 w-3.5 text-cyan-400" />
+                    <span>Copy</span>
+                  </button>
+
+                  <button
+                    onClick={handleSaveNotesToLibrary}
+                    className="px-2.5 py-1.5 bg-indigo-950/80 hover:bg-indigo-900/90 border border-indigo-800/80 rounded-xl text-indigo-300 hover:text-white text-[11px] font-semibold flex items-center gap-1.5 transition shadow-sm"
+                    title="Export Notes to Local Storage Library"
+                  >
+                    <Save className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>Save to Library</span>
+                  </button>
+
+                  <button
+                    onClick={handleDownloadNotes}
+                    className="px-2.5 py-1.5 bg-cyan-950/80 hover:bg-cyan-900/90 border border-cyan-800/80 rounded-xl text-cyan-300 hover:text-white text-[11px] font-semibold flex items-center gap-1.5 transition shadow-sm"
+                    title="Download Notes as Markdown (.md) File"
+                  >
+                    <Download className="h-3.5 w-3.5 text-cyan-400" />
+                    <span>Export .md</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Export Success Toast Banner */}
+              {exportNotice && (
+                <div className="px-3 py-2 bg-emerald-950/80 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-semibold flex items-center justify-between animate-fade-in shadow-lg">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span>{exportNotice}</span>
+                  </div>
+                  <button onClick={() => setExportNotice(null)} className="text-emerald-400 hover:text-white">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+
               <textarea
                 value={notesText}
                 onChange={handleNotesChange}

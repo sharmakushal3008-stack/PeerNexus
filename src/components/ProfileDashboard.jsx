@@ -285,7 +285,81 @@ export default function ProfileDashboard({
 
       </div>
 
-      {/* Rating & Escrow Completion Modal */}
+      {/* SAVED NOTES LIBRARY SECTION */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-white flex items-center gap-2">
+            <BookOpen className="h-4 w-4 text-cyan-400" />
+            My Saved Notes & Code Library
+          </h2>
+          <span className="text-[11px] text-slate-400 font-mono">Exported to Local Storage</span>
+        </div>
+
+        {(() => {
+          const libraryNotes = JSON.parse(localStorage.getItem('cf_user_notes_library') || '[]');
+          if (libraryNotes.length === 0) {
+            return (
+              <div className="text-center py-8 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-500">
+                No notes saved in your local library yet. Open any live session room and click "Save to Library"!
+              </div>
+            );
+          }
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {libraryNotes.map((note) => (
+                <div key={note.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3 flex flex-col justify-between text-xs">
+                  <div>
+                    <div className="flex items-center justify-between font-bold text-white">
+                      <span>{note.topic}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">{note.savedAt}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">Peer: <span className="text-cyan-300">{note.peer}</span></div>
+                    <pre className="mt-2 p-2.5 bg-slate-900 rounded-lg text-[11px] font-mono text-emerald-300 max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed border border-slate-800/80">
+                      {note.content}
+                    </pre>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-900">
+                    <button
+                      onClick={() => navigator.clipboard.writeText(note.content)}
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded font-semibold text-[11px] flex items-center gap-1 transition"
+                    >
+                      <Copy className="h-3 w-3 text-cyan-400" /> Copy
+                    </button>
+                    <button
+                      onClick={() => {
+                        const filename = `PeerNexus_Note_${(note.topic || 'Note').replace(/[^a-zA-Z0-9]/g, '_')}.md`;
+                        const blob = new Blob([note.content], { type: 'text/markdown;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="px-3 py-1.5 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 rounded font-semibold text-[11px] flex items-center gap-1 transition"
+                    >
+                      <Download className="h-3 w-3 text-cyan-400" /> Download
+                    </button>
+                    <button
+                      onClick={() => {
+                        const updated = libraryNotes.filter(n => n.id !== note.id);
+                        localStorage.setItem('cf_user_notes_library', JSON.stringify(updated));
+                        storageService.notifySync();
+                      }}
+                      className="ml-auto p-1.5 text-slate-500 hover:text-red-400 transition"
+                      title="Delete Note"
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
       {ratingModalTrade && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
