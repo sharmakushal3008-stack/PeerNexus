@@ -12,6 +12,7 @@ import {
   Sparkles,
   AlertCircle
 } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 const ICE_SERVERS = {
   iceServers: [
@@ -128,9 +129,105 @@ export default function ActiveSessionRoomModal({
   const remoteSyntheticStreamRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const roomChannelRef = useRef(null);
+  const supabaseChannelRef = useRef(null);
+  const iceCandidateQueue = useRef([]);
 
   const otherPersonName = trade ? (trade.senderId === currentUser.id ? (trade.receiverName || `Peer (${trade.receiverId})`) : trade.senderName) : 'Peer Student';
   const isInitiator = trade ? trade.senderId === currentUser.id : false;
+
+  // Broadcast Signal (Supabase Realtime Channel for Cross-Device/Vercel + BroadcastChannel for same-browser)
+  const sendSignal = useCallback((payload) => {
+    if (supabaseChannelRef.current) {
+      supabaseChannelRef.current.send({
+        type: 'broadcast',
+        event: 'signal',
+        payload
+      }).catch(err => console.warn('Supabase Realtime signal error:', err));
+    }
+    if (roomChannelRef.current) {
+      roomChannelRef.current.postMessage(payload);
+    }
+  }, []);
+
+  // Process Incoming WebRTC Signals & Collaborative Notes
+  const handleIncomingSignal = useCallback(async (data) => {
+    if (!data || data.senderId === currentUser.id) return;
+    const pc = peerConnectionRef.current;
+
+    if (data.type === 'NOTE_UPDATE') {
+      setNotesText(data.content);
+      return;
+    }
+
+    if (!pc) return;
+
+    if (data.type === 'JOIN_ROOM') {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        sendSignal({
+          type: 'SDP_OFFER',
+          senderId: currentUser.id,
+          sdp: offer
+        });
+      } catch (err) {
+        console.warn('Offer creation error:', err);
+      }
+      return;
+    }
+
+    if (data.type === 'SDP_OFFER') {
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        // Flush queued ICE candidates
+        while (iceCandidateQueue.current.length > 0) {
+          const cand = iceCandidateQueue.current.shift();
+          await pc.addIceCandidate(cand).catch(e => console.warn('Queued ICE add:', e));
+        }
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        sendSignal({
+          type: 'SDP_ANSWER',
+          senderId: currentUser.id,
+          sdp: answer
+        });
+      } catch (err) {
+        console.warn('SDP Offer handling error:', err);
+      }
+      return;
+    }
+
+    if (data.type === 'SDP_ANSWER') {
+      try {
+        if (pc.signalingState !== 'stable') {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          while (iceCandidateQueue.current.length > 0) {
+            const cand = iceCandidateQueue.current.shift();
+            await pc.addIceCandidate(cand).catch(e => console.warn('Queued ICE add:', e));
+          }
+        }
+      } catch (err) {
+        console.warn('SDP Answer handling error:', err);
+      }
+      return;
+    }
+
+    if (data.type === 'ICE_CANDIDATE') {
+      try {
+        if (data.candidate) {
+          const candidate = new RTCIceCandidate(data.candidate);
+          if (pc.remoteDescription && pc.remoteDescription.type) {
+            await pc.addIceCandidate(candidate);
+          } else {
+            iceCandidateQueue.current.push(candidate);
+          }
+        }
+      } catch (err) {
+        console.warn('ICE candidate handling error:', err);
+      }
+      return;
+    }
+  }, [currentUser.id, sendSignal]);
 
   // Callback ref for Local Video Node
   const setLocalVideoNode = useCallback((node) => {
@@ -168,7 +265,6 @@ export default function ActiveSessionRoomModal({
         let localStream = null;
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           try {
-            // Attempt 1: Video + Audio
             localStream = await navigator.mediaDevices.getUserMedia({
               video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
               audio: true
@@ -176,13 +272,9 @@ export default function ActiveSessionRoomModal({
           } catch (errAudio) {
             console.warn('Audio + Video failed, trying Video only...', errAudio);
             try {
-              // Attempt 2: Video only
-              localStream = await navigator.mediaDevices.getUserMedia({
-                video: true,
-                audio: false
-              });
+              localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
             } catch (errVid) {
-              console.warn('Hardware camera unavailable or permission denied, initializing Live Synthetic Stream...', errVid);
+              console.warn('Hardware camera unavailable, initializing Live Synthetic Stream...', errVid);
               localStream = createSyntheticVideoStream(currentUser.name, false);
             }
           }
@@ -204,15 +296,6 @@ export default function ActiveSessionRoomModal({
           localVideoRef.current.play().catch(e => console.warn('Local play:', e));
         }
 
-        // Initialize Peer Stream simulation for single-user live demo mode
-        const remoteSynthStream = createSyntheticVideoStream(otherPersonName, true);
-        remoteSyntheticStreamRef.current = remoteSynthStream;
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteSynthStream;
-          remoteVideoRef.current.play().catch(e => console.warn('Remote synth play:', e));
-        }
-        setIsRemoteConnected(true);
-
         // 2. Instantiate RTCPeerConnection with STUN Servers
         const pc = new RTCPeerConnection(ICE_SERVERS);
         peerConnectionRef.current = pc;
@@ -224,7 +307,7 @@ export default function ActiveSessionRoomModal({
           });
         }
 
-        // Handle Incoming Remote Stream Track (Overrides Synthetic Remote)
+        // Handle Incoming Remote Stream Track from Real Peer Device
         pc.ontrack = (event) => {
           if (event.streams && event.streams[0]) {
             if (remoteVideoRef.current) {
@@ -235,10 +318,10 @@ export default function ActiveSessionRoomModal({
           }
         };
 
-        // Handle ICE Candidates and Broadcast to Signaling Channel
+        // Handle ICE Candidates and Broadcast to Signaling Channels
         pc.onicecandidate = (event) => {
-          if (event.candidate && roomChannelRef.current) {
-            roomChannelRef.current.postMessage({
+          if (event.candidate) {
+            sendSignal({
               type: 'ICE_CANDIDATE',
               senderId: currentUser.id,
               candidate: event.candidate
@@ -246,86 +329,52 @@ export default function ActiveSessionRoomModal({
           }
         };
 
-        // 3. Setup Broadcast Channel for Real-Time Cross-Device Signaling
+        // 3. Setup Supabase Realtime Channel for Cross-Device Internet Signaling
+        if (isSupabaseConfigured && supabase) {
+          const sbChannel = supabase.channel(`peernexus_room_${trade.id}`, {
+            config: { broadcast: { self: false } }
+          });
+          supabaseChannelRef.current = sbChannel;
+
+          sbChannel
+            .on('broadcast', { event: 'signal' }, (payload) => {
+              if (payload && payload.payload) {
+                handleIncomingSignal(payload.payload);
+              }
+            })
+            .subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                sendSignal({ type: 'JOIN_ROOM', senderId: currentUser.id });
+              }
+            });
+        }
+
+        // 4. Setup BroadcastChannel Fallback (Same-Browser Tab-to-Tab)
         if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
           const channel = new BroadcastChannel(channelName);
           roomChannelRef.current = channel;
 
-          channel.onmessage = async (e) => {
-            const data = e.data;
-            if (!data || data.senderId === currentUser.id) return;
-
-            if (data.type === 'NOTE_UPDATE') {
-              setNotesText(data.content);
-              return;
-            }
-
-            if (data.type === 'SDP_OFFER') {
-              try {
-                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                channel.postMessage({
-                  type: 'SDP_ANSWER',
-                  senderId: currentUser.id,
-                  sdp: answer
-                });
-              } catch (err) {
-                console.warn('SDP Offer error:', err);
-              }
-            } else if (data.type === 'SDP_ANSWER') {
-              try {
-                if (pc.signalingState !== 'stable') {
-                  await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-                }
-              } catch (err) {
-                console.warn('SDP Answer error:', err);
-              }
-            } else if (data.type === 'ICE_CANDIDATE') {
-              try {
-                if (data.candidate) {
-                  await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-                }
-              } catch (err) {
-                console.warn('ICE Candidate error:', err);
-              }
-            } else if (data.type === 'JOIN_ROOM') {
-              if (isInitiator) {
-                try {
-                  const offer = await pc.createOffer();
-                  await pc.setLocalDescription(offer);
-                  channel.postMessage({
-                    type: 'SDP_OFFER',
-                    senderId: currentUser.id,
-                    sdp: offer
-                  });
-                } catch (err) {
-                  console.warn('Offer creation error:', err);
-                }
-              }
-            }
+          channel.onmessage = (e) => {
+            if (e.data) handleIncomingSignal(e.data);
           };
 
           channel.postMessage({ type: 'JOIN_ROOM', senderId: currentUser.id });
-
-          if (isInitiator) {
-            setTimeout(async () => {
-              if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
-                try {
-                  const offer = await pc.createOffer();
-                  await pc.setLocalDescription(offer);
-                  channel.postMessage({
-                    type: 'SDP_OFFER',
-                    senderId: currentUser.id,
-                    sdp: offer
-                  });
-                } catch (e) {
-                  console.warn('Initial offer error:', e);
-                }
-              }
-            }, 800);
-          }
         }
+
+        // 5. Fallback Remote Synthetic Stream for single-user demo testing after 4s
+        setTimeout(() => {
+          if (isMounted && !peerConnectionRef.current?.remoteDescription) {
+            if (!remoteVideoRef.current?.srcObject) {
+              const remoteSynthStream = createSyntheticVideoStream(otherPersonName, true);
+              remoteSyntheticStreamRef.current = remoteSynthStream;
+              if (remoteVideoRef.current) {
+                remoteVideoRef.current.srcObject = remoteSynthStream;
+                remoteVideoRef.current.play().catch(e => console.warn('Remote synth play:', e));
+              }
+              setIsRemoteConnected(true);
+            }
+          }
+        }, 4000);
 
       } catch (err) {
         console.warn('WebRTC Media Setup Error:', err);
@@ -355,10 +404,14 @@ export default function ActiveSessionRoomModal({
         roomChannelRef.current.close();
         roomChannelRef.current = null;
       }
+      if (supabaseChannelRef.current && supabase) {
+        supabase.removeChannel(supabaseChannelRef.current);
+        supabaseChannelRef.current = null;
+      }
       setIsStreamActive(false);
       setIsRemoteConnected(false);
     };
-  }, [isOpen, trade?.id]);
+  }, [isOpen, trade?.id, currentUser.id, handleIncomingSignal, otherPersonName, sendSignal]);
 
   // Re-bind remote & local video tags when tab switches back to 'video'
   useEffect(() => {
@@ -406,18 +459,16 @@ export default function ActiveSessionRoomModal({
     }
   };
 
-  // Handle Note Editing & Broadcast to Peer
+  // Handle Note Editing & Real-Time Broadcast to Peer
   const handleNotesChange = (e) => {
     const newText = e.target.value;
     setNotesText(newText);
-    if (roomChannelRef.current) {
-      roomChannelRef.current.postMessage({
-        type: 'NOTE_UPDATE',
-        senderId: currentUser.id,
-        content: newText,
-        timestamp: Date.now()
-      });
-    }
+    sendSignal({
+      type: 'NOTE_UPDATE',
+      senderId: currentUser.id,
+      content: newText,
+      timestamp: Date.now()
+    });
   };
 
   if (!isOpen || !trade) return null;
