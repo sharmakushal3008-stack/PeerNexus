@@ -131,23 +131,46 @@ export default function ActiveSessionRoomModal({
   const roomChannelRef = useRef(null);
   const supabaseChannelRef = useRef(null);
   const iceCandidateQueue = useRef([]);
+  const lastSignalTimeRef = useRef(0);
+  const lastNoteTimeRef = useRef(0);
 
   const otherPersonName = trade ? (trade.senderId === currentUser.id ? (trade.receiverName || `Peer (${trade.receiverId})`) : trade.senderName) : 'Peer Student';
   const isInitiator = trade ? trade.senderId === currentUser.id : false;
 
-  // Broadcast Signal (Supabase Realtime Channel for Cross-Device/Vercel + BroadcastChannel for same-browser)
+  // Initial Sync for Saved Session Notes
+  useEffect(() => {
+    if (trade?.id) {
+      try {
+        const savedNotes = localStorage.getItem(`cf_notes_${trade.id}`);
+        if (savedNotes) {
+          const parsed = JSON.parse(savedNotes);
+          if (parsed && parsed.content) {
+            setNotesText(parsed.content);
+          }
+        }
+      } catch (e) {}
+    }
+  }, [trade?.id]);
+
+  // Triple-Redundant Signal Broadcast (Supabase Realtime + BroadcastChannel + Storage Sync)
   const sendSignal = useCallback((payload) => {
+    const fullSignal = { ...payload, roomKey: `room_${trade.id}`, timestamp: Date.now() };
+
     if (supabaseChannelRef.current) {
       supabaseChannelRef.current.send({
         type: 'broadcast',
         event: 'signal',
-        payload
+        payload: fullSignal
       }).catch(err => console.warn('Supabase Realtime signal error:', err));
     }
     if (roomChannelRef.current) {
-      roomChannelRef.current.postMessage(payload);
+      roomChannelRef.current.postMessage(fullSignal);
     }
-  }, []);
+    try {
+      localStorage.setItem(`cf_signal_${trade.id}`, JSON.stringify(fullSignal));
+      storageService.notifySync();
+    } catch (e) {}
+  }, [trade?.id]);
 
   // Process Incoming WebRTC Signals & Collaborative Notes
   const handleIncomingSignal = useCallback(async (data) => {
@@ -155,7 +178,10 @@ export default function ActiveSessionRoomModal({
     const pc = peerConnectionRef.current;
 
     if (data.type === 'NOTE_UPDATE') {
-      setNotesText(data.content);
+      if (data.timestamp > (lastNoteTimeRef.current || 0)) {
+        lastNoteTimeRef.current = data.timestamp;
+        setNotesText(data.content);
+      }
       return;
     }
 
@@ -179,7 +205,6 @@ export default function ActiveSessionRoomModal({
     if (data.type === 'SDP_OFFER') {
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        // Flush queued ICE candidates
         while (iceCandidateQueue.current.length > 0) {
           const cand = iceCandidateQueue.current.shift();
           await pc.addIceCandidate(cand).catch(e => console.warn('Queued ICE add:', e));
@@ -437,6 +462,43 @@ export default function ActiveSessionRoomModal({
     }
   }, [activeTab]);
 
+  // Storage & Sync listener for signals and real-time collaborative notes
+  useEffect(() => {
+    if (!isOpen || !trade?.id) return;
+
+    const checkSignalsAndNotes = () => {
+      try {
+        const sigData = localStorage.getItem(`cf_signal_${trade.id}`);
+        if (sigData) {
+          const parsed = JSON.parse(sigData);
+          if (parsed && parsed.senderId !== currentUser.id && parsed.timestamp > (lastSignalTimeRef.current || 0)) {
+            lastSignalTimeRef.current = parsed.timestamp;
+            handleIncomingSignal(parsed);
+          }
+        }
+      } catch (e) {}
+
+      try {
+        const noteData = localStorage.getItem(`cf_notes_${trade.id}`);
+        if (noteData) {
+          const parsed = JSON.parse(noteData);
+          if (parsed && parsed.senderId !== currentUser.id && parsed.timestamp > (lastNoteTimeRef.current || 0)) {
+            lastNoteTimeRef.current = parsed.timestamp;
+            setNotesText(parsed.content);
+          }
+        }
+      } catch (e) {}
+    };
+
+    const unsubscribe = storageService.subscribeToSync(checkSignalsAndNotes);
+    const interval = setInterval(checkSignalsAndNotes, 800);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [isOpen, trade?.id, currentUser.id, handleIncomingSignal]);
+
   // Toggle Local Video Track
   const handleToggleVideo = () => {
     const nextState = !isVideoOn;
@@ -463,12 +525,22 @@ export default function ActiveSessionRoomModal({
   const handleNotesChange = (e) => {
     const newText = e.target.value;
     setNotesText(newText);
-    sendSignal({
+    const now = Date.now();
+    lastNoteTimeRef.current = now;
+
+    const payload = {
       type: 'NOTE_UPDATE',
       senderId: currentUser.id,
       content: newText,
-      timestamp: Date.now()
-    });
+      timestamp: now
+    };
+
+    try {
+      localStorage.setItem(`cf_notes_${trade.id}`, JSON.stringify(payload));
+      storageService.notifySync();
+    } catch (e) {}
+
+    sendSignal(payload);
   };
 
   if (!isOpen || !trade) return null;
