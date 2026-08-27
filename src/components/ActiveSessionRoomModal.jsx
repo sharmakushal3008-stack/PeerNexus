@@ -13,6 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
+import { storageService } from '../services/storageService';
 
 const ICE_SERVERS = {
   iceServers: [
