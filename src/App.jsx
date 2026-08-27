@@ -328,15 +328,80 @@ export default function App() {
   }
 
   // AUTHENTICATED USER DASHBOARD
+  // Compute Real-Time Notifications list for currentUser
+  const userNotifications = currentUser ? [
+    // 1. Incoming Pending Escrow Requests
+    ...tradeRequests
+      .filter(t => t.receiverId === currentUser.id && t.status === 'Pending Escrow')
+      .map(t => ({
+        id: `notif-req-${t.id}`,
+        type: 'INCOMING_REQUEST',
+        title: '⚡ Incoming Skill Trade Request',
+        desc: `${t.senderName} requested to barter: ${t.skillOffered} (${t.creditsRequired} Cr)`,
+        timestamp: 'Action Needed',
+        trade: t
+      })),
+
+    // 2. Accepted Trade Requests (Sender notified when receiver accepts)
+    ...tradeRequests
+      .filter(t => t.senderId === currentUser.id && t.status === 'Accepted')
+      .map(t => ({
+        id: `notif-acc-${t.id}`,
+        type: 'ACCEPTED_REQUEST',
+        title: '✅ Trade Request Accepted!',
+        desc: `${t.receiverName || 'Peer'} accepted your request for ${t.skillOffered}. Click to enter live room!`,
+        timestamp: 'Live Room Ready',
+        trade: t
+      })),
+
+    // 3. Completed Trade Requests
+    ...tradeRequests
+      .filter(t => (t.senderId === currentUser.id || t.receiverId === currentUser.id) && t.status === 'Completed')
+      .map(t => ({
+        id: `notif-comp-${t.id}`,
+        type: 'COMPLETED_REQUEST',
+        title: '🎉 Session Completed',
+        desc: `Session for ${t.skillOffered} completed. Escrow released!`,
+        timestamp: 'Completed',
+        trade: t
+      })),
+
+    // 4. Messages sent to currentUser
+    ...messages
+      .filter(m => m.receiverId === currentUser.id)
+      .slice(-3)
+      .map(m => ({
+        id: `notif-msg-${m.id}`,
+        type: 'MESSAGE',
+        title: `💬 Message from ${m.senderName}`,
+        desc: m.text,
+        timestamp: m.timestamp || 'Recent',
+        senderId: m.senderId
+      }))
+  ] : [];
+
+  const handleNotificationClick = (notif) => {
+    if (notif.trade) {
+      if (notif.trade.status === 'Accepted') {
+        setActiveSessionTrade(notif.trade);
+      } else {
+        setActiveTab('profile');
+      }
+    } else if (notif.senderId) {
+      const sender = users.find(u => u.id === notif.senderId);
+      if (sender) setChatRecipient(sender);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950">
+    <div className="min-h-screen bg-slate-950 flex text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950">
       
       {/* Sidebar Navigation */}
       <SidebarNav
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         currentUser={currentUser}
-        onOpenAIAdvisor={() => setIsAIAdvisorOpen(true)}
+        onOpenEditProfile={() => setIsEditProfileOpen(true)}
         onLogout={handleLogout}
       />
 
@@ -350,11 +415,8 @@ export default function App() {
           currentUser={currentUser}
           onOpenAIAdvisor={() => setIsAIAdvisorOpen(true)}
           onLogout={handleLogout}
-          notifications={tradeRequests.filter(t => t.receiverId === currentUser.id).map(t => ({
-            id: t.id,
-            title: 'Incoming Skill Trade Request',
-            desc: `${t.senderName} requested ${t.skillOffered}`
-          }))}
+          notifications={userNotifications}
+          onNotificationClick={handleNotificationClick}
         />
 
         {/* View Content */}

@@ -8,7 +8,7 @@ import {
   LogOut
 } from 'lucide-react';
 
-export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpenAIAdvisor, onLogout, notifications = [] }) {
+export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpenAIAdvisor, onLogout, notifications = [], onNotificationClick }) {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -60,28 +60,47 @@ export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpen
             <button
               onClick={() => setIsNotifOpen(!isNotifOpen)}
               className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl relative transition"
+              title="Notifications"
             >
               <Bell className="h-4 w-4" />
               {notifications.length > 0 && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-cyan-500 text-[9px] font-bold text-slate-950 flex items-center justify-center border border-slate-900 shadow">
+                  {notifications.length}
+                </span>
               )}
             </button>
 
             {/* Notifications Popover */}
             {isNotifOpen && (
-              <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 space-y-3 z-50">
+              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 space-y-3 z-50 animate-fade-in">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                   <span className="text-xs font-bold text-white">Campus Inbox Notifications</span>
+                  <span className="text-[10px] text-cyan-400 font-mono font-bold bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800/80">
+                    {notifications.length} Active
+                  </span>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                   {notifications.length === 0 ? (
-                    <div className="text-xs text-slate-500 text-center py-4">No unread notifications</div>
+                    <div className="text-xs text-slate-500 text-center py-6">No active notifications</div>
                   ) : (
                     notifications.map((n) => (
-                      <div key={n.id} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs space-y-1">
-                        <div className="font-bold text-slate-200">{n.title}</div>
-                        <div className="text-[11px] text-slate-400">{n.desc}</div>
+                      <div 
+                        key={n.id} 
+                        onClick={() => {
+                          if (onNotificationClick) onNotificationClick(n);
+                          setIsNotifOpen(false);
+                        }}
+                        className="bg-slate-950 hover:bg-slate-950/80 p-3 rounded-xl border border-slate-800 text-xs space-y-1 cursor-pointer transition group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="font-bold text-slate-100 group-hover:text-cyan-400 transition">{n.title}</div>
+                          <span className="text-[9px] text-slate-500 font-mono">{n.timestamp}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 leading-normal">{n.desc}</div>
+                        <div className="text-[10px] text-cyan-400 font-semibold pt-1 flex items-center gap-1">
+                          <span>Click to view →</span>
+                        </div>
                       </div>
                     ))
                   )}
