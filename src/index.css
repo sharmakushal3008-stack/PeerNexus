@@ -1,25 +1,103 @@
 @import "tailwindcss";
 
+@theme {
+  --color-slate-950: #f8fafc;
+  --color-slate-900: #ffffff;
+  --color-slate-850: #f1f5f9;
+  --color-slate-800: #e2e8f0;
+  --color-slate-700: #cbd5e1;
+  --color-slate-600: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-400: #475569;
+  --color-slate-300: #334155;
+  --color-slate-200: #1e293b;
+  --color-slate-100: #0f172a;
+  --color-slate-50: #020617;
+
+  --color-cyan-600: #4338ca;
+  --color-cyan-500: #4f46e5;
+  --color-cyan-400: #6366f1;
+  --color-cyan-300: #4338ca;
+  --color-cyan-200: #818cf8;
+  --color-cyan-100: #e0e7ff;
+  --color-cyan-50: #eef2ff;
+
+  --color-indigo-950: #e0f2fe;
+  --color-indigo-900: #bae6fd;
+  --color-indigo-800: #7dd3fc;
+  --color-indigo-700: #38bdf8;
+  --color-indigo-600: #0284c7;
+  --color-indigo-500: #0ea5e9;
+  --color-indigo-400: #0284c7;
+
+  --color-purple-950: #f5f3ff;
+  --color-purple-900: #ede9fe;
+  --color-purple-600: #7c3aed;
+  --color-purple-500: #8b5cf6;
+  --color-purple-400: #6d28d9;
+  --color-purple-300: #5b21b6;
+
+  --color-emerald-950: #f0fdf4;
+  --color-emerald-900: #dcfce7;
+  --color-emerald-600: #059669;
+  --color-emerald-500: #10b981;
+  --color-emerald-400: #047857;
+  --color-emerald-300: #065f46;
+
+  --color-amber-950: #fffbeb;
+  --color-amber-900: #fef3c7;
+  --color-amber-600: #d97706;
+  --color-amber-500: #f59e0b;
+  --color-amber-400: #b45309;
+  --color-amber-300: #92400e;
+
+  --color-red-950: #fef2f2;
+  --color-red-900: #fee2e2;
+  --color-red-600: #dc2626;
+  --color-red-500: #ef4444;
+  --color-red-400: #b91c1c;
+  --color-red-300: #991b1b;
+}
+
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 font-sans antialiased overflow-x-hidden selection:bg-cyan-500 selection:text-slate-950;
+    background-color: #f8fafc;
+    color: #0f172a;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* Ensure text-white on light cards displays as deep slate, but preserves pure white inside solid colored buttons */
+  .bg-slate-900 > .text-white,
+  .bg-slate-950 > .text-white,
+  .bg-slate-900 .text-white:not(button *):not(button):not(a *):not(a):not(.bg-gradient-to-r *):not(.bg-indigo-600 *):not(.bg-cyan-600 *):not(.bg-emerald-600 *):not(.bg-purple-600 *):not(.bg-red-600 *):not(.bg-cyan-500 *):not(.bg-indigo-500 *):not(.bg-purple-500 *),
+  .bg-slate-950 .text-white:not(button *):not(button):not(a *):not(a):not(.bg-gradient-to-r *):not(.bg-indigo-600 *):not(.bg-cyan-600 *):not(.bg-emerald-600 *):not(.bg-purple-600 *):not(.bg-red-600 *):not(.bg-cyan-500 *):not(.bg-indigo-500 *):not(.bg-purple-500 *) {
+    color: #0f172a;
+  }
+
+  /* Ensure card borders look clean and light */
+  .border-slate-800,
+  .border-slate-800\/80,
+  .border-slate-800\/90 {
+    border-color: #e2e8f0;
   }
 }
 
-/* Custom Cyber Glass Scrollbars */
+/* Light Nordic Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #020617;
+  background: #f8fafc;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #cbd5e1;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #06b6d4;
+  background: #4f46e5;
 }
 
 /* Custom Keyframes */
