@@ -405,72 +405,148 @@ export const storageService = {
   async syncFromCloud() {
     if (!isSupabaseConfigured || !supabase) return false;
     try {
-      // 1. Fetch Users
-      const { data: cloudUsers } = await supabase.from('users').select('*');
+      const localUsers = this.getUsers();
+      const localSkills = this.getSkillOffers();
+      const localProjects = this.getProjects();
+      const localTrades = this.getTradeRequests();
+      const localMessages = this.getMessages();
+
+      // 1. Sync & Merge Users
+      const { data: cloudUsers, error: usersErr } = await supabase.from('users').select('*');
       let usersMap = {};
-      if (cloudUsers && cloudUsers.length > 0) {
-        const formattedUsers = cloudUsers.map(u => ({
-          id: u.id,
-          email: u.email,
-          password: u.password || '',
-          name: u.name || '',
-          rollNo: u.roll_no || u.rollNo || '',
-          branch: u.branch || '',
-          year: u.year || '',
-          avatar: u.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.name || 'user')}`,
-          bio: u.bio || '',
-          credits: u.credits ?? 200,
-          reputation: u.reputation ?? 100,
-          skillsOffered: u.skills_offered || u.skillsOffered || [],
-          skillsWanted: u.skills_wanted || u.skillsWanted || [],
-          badges: u.badges || ["PeerNexus Member"]
-        }));
 
-        formattedUsers.forEach(u => { usersMap[u.id] = u; });
-        this.saveUsers(formattedUsers);
+      if (!usersErr && cloudUsers) {
+        const cloudUsersMap = {};
+        cloudUsers.forEach(u => {
+          cloudUsersMap[u.id] = {
+            id: u.id,
+            email: u.email,
+            password: u.password || '',
+            name: u.name || '',
+            rollNo: u.roll_no || u.rollNo || '',
+            branch: u.branch || '',
+            year: u.year || '',
+            avatar: u.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(u.name || 'user')}`,
+            bio: u.bio || '',
+            credits: u.credits ?? 200,
+            reputation: u.reputation ?? 100,
+            skillsOffered: u.skills_offered || u.skillsOffered || [],
+            skillsWanted: u.skills_wanted || u.skillsWanted || [],
+            badges: u.badges || ["PeerNexus Member"]
+          };
+        });
+
+        // Push any locally created users not yet in cloud
+        const missingInCloud = localUsers.filter(lu => !cloudUsersMap[lu.id]);
+        if (missingInCloud.length > 0) {
+          const payload = missingInCloud.map(u => ({
+            id: u.id,
+            email: u.email,
+            password: u.password || '',
+            name: u.name || '',
+            roll_no: u.rollNo || '',
+            branch: u.branch || '',
+            year: u.year || '',
+            avatar: u.avatar || '',
+            bio: u.bio || '',
+            credits: u.credits ?? 200,
+            reputation: u.reputation ?? 100,
+            skills_offered: u.skillsOffered || [],
+            skills_wanted: u.skillsWanted || [],
+            badges: u.badges || ["PeerNexus Member"]
+          }));
+          await supabase.from('users').upsert(payload);
+          missingInCloud.forEach(u => { cloudUsersMap[u.id] = u; });
+        }
+
+        const mergedUsers = Object.values(cloudUsersMap);
+        mergedUsers.forEach(u => { usersMap[u.id] = u; });
+        localStorage.setItem(KEYS.USERS, JSON.stringify(mergedUsers));
       }
 
-      // 2. Fetch Skill Offers
-      const { data: skills } = await supabase.from('skills').select('*');
-      if (skills && skills.length > 0) {
-        const formattedSkills = skills.map(s => ({
-          id: s.id,
-          authorId: s.user_id,
-          authorName: s.user_name || (usersMap[s.user_id] ? usersMap[s.user_id].name : 'Member'),
-          authorAvatar: s.user_avatar || (usersMap[s.user_id] ? usersMap[s.user_id].avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.user_name || 'peer')}`),
-          skillOffered: s.title,
-          skillWanted: 'Tech Assistance',
-          category: s.category || 'Machine Learning',
-          description: s.description || '',
-          creditsRequired: s.credits || 40,
-          rating: 5.0,
-          status: 'Online'
-        }));
-        this.saveSkillOffers(formattedSkills);
+      // 2. Sync & Merge Skill Offers
+      const { data: cloudSkills, error: skillsErr } = await supabase.from('skills').select('*');
+      if (!skillsErr && cloudSkills) {
+        const cloudSkillsMap = {};
+        cloudSkills.forEach(s => {
+          cloudSkillsMap[s.id] = {
+            id: s.id,
+            authorId: s.user_id,
+            authorName: s.user_name || (usersMap[s.user_id] ? usersMap[s.user_id].name : 'Member'),
+            authorAvatar: s.user_avatar || (usersMap[s.user_id] ? usersMap[s.user_id].avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.user_name || 'peer')}`),
+            skillOffered: s.title,
+            skillWanted: 'Tech Assistance',
+            category: s.category || 'Machine Learning',
+            description: s.description || '',
+            creditsRequired: s.credits || 40,
+            rating: 5.0,
+            status: 'Online'
+          };
+        });
+
+        // Push any locally created skills not yet in cloud
+        const missingSkillsInCloud = localSkills.filter(ls => !cloudSkillsMap[ls.id]);
+        if (missingSkillsInCloud.length > 0) {
+          const payload = missingSkillsInCloud.map(s => ({
+            id: s.id,
+            user_id: s.authorId,
+            user_name: s.authorName,
+            user_avatar: s.authorAvatar,
+            title: s.skillOffered,
+            category: s.category,
+            credits: s.creditsRequired,
+            description: s.description
+          }));
+          await supabase.from('skills').upsert(payload);
+          missingSkillsInCloud.forEach(s => { cloudSkillsMap[s.id] = s; });
+        }
+
+        const mergedSkills = Object.values(cloudSkillsMap);
+        localStorage.setItem(KEYS.SKILLS, JSON.stringify(mergedSkills));
       }
 
-      // 3. Fetch Projects
-      const { data: projects } = await supabase.from('projects').select('*');
-      if (projects && projects.length > 0) {
-        const formattedProjects = projects.map(p => ({
-          id: p.id,
-          leadId: p.user_id,
-          leadName: p.owner || (usersMap[p.user_id] ? usersMap[p.user_id].name : 'Project Lead'),
-          leadAvatar: (usersMap[p.user_id] ? usersMap[p.user_id].avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(p.owner || 'lead')}`),
-          title: p.title,
-          category: p.category || 'Full-Stack',
-          description: p.description || '',
-          rolesNeeded: p.roles_needed || [],
-          tags: p.tags || ['React', 'Node.js'],
-          deadline: 'Capstone Target',
-          teamSize: '1 / 3 Members'
-        }));
-        this.saveProjects(formattedProjects);
+      // 3. Sync Projects
+      const { data: cloudProjects, error: projErr } = await supabase.from('projects').select('*');
+      if (!projErr && cloudProjects) {
+        const cloudProjectsMap = {};
+        cloudProjects.forEach(p => {
+          cloudProjectsMap[p.id] = {
+            id: p.id,
+            leadId: p.user_id,
+            leadName: p.owner || (usersMap[p.user_id] ? usersMap[p.user_id].name : 'Project Lead'),
+            leadAvatar: (usersMap[p.user_id] ? usersMap[p.user_id].avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(p.owner || 'lead')}`),
+            title: p.title,
+            category: p.category || 'Full-Stack',
+            description: p.description || '',
+            rolesNeeded: p.roles_needed || [],
+            tags: p.tags || ['React', 'Node.js'],
+            deadline: 'Capstone Target',
+            teamSize: '1 / 3 Members'
+          };
+        });
+
+        const missingProjInCloud = localProjects.filter(lp => !cloudProjectsMap[lp.id]);
+        if (missingProjInCloud.length > 0) {
+          const payload = missingProjInCloud.map(p => ({
+            id: p.id,
+            user_id: p.leadId || 'usr-lead',
+            owner: p.leadName,
+            title: p.title,
+            category: p.category,
+            description: p.description,
+            roles_needed: p.rolesNeeded,
+            tags: p.tags
+          }));
+          await supabase.from('projects').upsert(payload);
+          missingProjInCloud.forEach(p => { cloudProjectsMap[p.id] = p; });
+        }
+
+        localStorage.setItem(KEYS.PROJECTS, JSON.stringify(Object.values(cloudProjectsMap)));
       }
 
-      // 4. Fetch Trade Requests
-      const { data: cloudTrades } = await supabase.from('trades').select('*');
-      if (cloudTrades && cloudTrades.length > 0) {
+      // 4. Sync Trades
+      const { data: cloudTrades, error: tradesErr } = await supabase.from('trades').select('*');
+      if (!tradesErr && cloudTrades) {
         const formattedTrades = cloudTrades.map(t => ({
           id: t.id,
           senderId: t.sender_id,
@@ -485,9 +561,9 @@ export const storageService = {
         localStorage.setItem(KEYS.TRADES, JSON.stringify(formattedTrades));
       }
 
-      // 5. Fetch Messages
-      const { data: cloudMessages } = await supabase.from('messages').select('*');
-      if (cloudMessages && cloudMessages.length > 0) {
+      // 5. Sync Messages
+      const { data: cloudMessages, error: msgErr } = await supabase.from('messages').select('*');
+      if (!msgErr && cloudMessages) {
         const formattedMessages = cloudMessages.map(m => ({
           id: m.id,
           senderId: m.sender_id,
