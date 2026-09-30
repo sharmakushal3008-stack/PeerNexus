@@ -6,81 +6,136 @@
   --color-slate-850: #f1f5f9;
   --color-slate-800: #e2e8f0;
   --color-slate-700: #cbd5e1;
-  --color-slate-600: #94a3b8;
-  --color-slate-500: #64748b;
-  --color-slate-400: #475569;
-  --color-slate-300: #334155;
-  --color-slate-200: #1e293b;
-  --color-slate-100: #0f172a;
+  --color-slate-600: #64748b;
+  --color-slate-500: #475569;
+  --color-slate-400: #334155;
+  --color-slate-300: #1e293b;
+  --color-slate-200: #0f172a;
+  --color-slate-100: #020617;
   --color-slate-50: #020617;
 
   --color-cyan-600: #4338ca;
   --color-cyan-500: #4f46e5;
-  --color-cyan-400: #6366f1;
-  --color-cyan-300: #4338ca;
-  --color-cyan-200: #818cf8;
+  --color-cyan-400: #4338ca;
+  --color-cyan-300: #3730a3;
+  --color-cyan-200: #312e81;
   --color-cyan-100: #e0e7ff;
   --color-cyan-50: #eef2ff;
 
   --color-indigo-950: #e0f2fe;
   --color-indigo-900: #bae6fd;
   --color-indigo-800: #7dd3fc;
-  --color-indigo-700: #38bdf8;
+  --color-indigo-700: #0369a1;
   --color-indigo-600: #0284c7;
-  --color-indigo-500: #0ea5e9;
-  --color-indigo-400: #0284c7;
+  --color-indigo-500: #0369a1;
+  --color-indigo-400: #075985;
+  --color-indigo-300: #0c4a6e;
 
   --color-purple-950: #f5f3ff;
   --color-purple-900: #ede9fe;
   --color-purple-600: #7c3aed;
-  --color-purple-500: #8b5cf6;
-  --color-purple-400: #6d28d9;
-  --color-purple-300: #5b21b6;
+  --color-purple-500: #6d28d9;
+  --color-purple-400: #5b21b6;
+  --color-purple-300: #4c1d95;
 
   --color-emerald-950: #f0fdf4;
   --color-emerald-900: #dcfce7;
   --color-emerald-600: #059669;
-  --color-emerald-500: #10b981;
-  --color-emerald-400: #047857;
-  --color-emerald-300: #065f46;
+  --color-emerald-500: #047857;
+  --color-emerald-400: #065f46;
+  --color-emerald-300: #064e3b;
 
   --color-amber-950: #fffbeb;
   --color-amber-900: #fef3c7;
   --color-amber-600: #d97706;
-  --color-amber-500: #f59e0b;
-  --color-amber-400: #b45309;
-  --color-amber-300: #92400e;
+  --color-amber-500: #b45309;
+  --color-amber-400: #92400e;
+  --color-amber-300: #78350f;
 
   --color-red-950: #fef2f2;
   --color-red-900: #fee2e2;
   --color-red-600: #dc2626;
-  --color-red-500: #ef4444;
-  --color-red-400: #b91c1c;
-  --color-red-300: #991b1b;
+  --color-red-500: #b91c1c;
+  --color-red-400: #991b1b;
+  --color-red-300: #7f1d1d;
 }
 
 @layer base {
   body {
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
   }
 
-  /* Ensure text-white on light cards displays as deep slate, but preserves pure white inside solid colored buttons */
-  .bg-slate-900 > .text-white,
-  .bg-slate-950 > .text-white,
-  .bg-slate-900 .text-white:not(button *):not(button):not(a *):not(a):not(.bg-gradient-to-r *):not(.bg-indigo-600 *):not(.bg-cyan-600 *):not(.bg-emerald-600 *):not(.bg-purple-600 *):not(.bg-red-600 *):not(.bg-cyan-500 *):not(.bg-indigo-500 *):not(.bg-purple-500 *),
-  .bg-slate-950 .text-white:not(button *):not(button):not(a *):not(a):not(.bg-gradient-to-r *):not(.bg-indigo-600 *):not(.bg-cyan-600 *):not(.bg-emerald-600 *):not(.bg-purple-600 *):not(.bg-red-600 *):not(.bg-cyan-500 *):not(.bg-indigo-500 *):not(.bg-purple-500 *) {
+  /* All titles and text default to crisp dark readable slate */
+  h1, h2, h3, h4, h5, h6 {
     color: #0f172a;
   }
 
-  /* Ensure card borders look clean and light */
+  /* High contrast text overrides for light surfaces */
+  .text-white {
+    color: #0f172a;
+  }
+
+  /* Keep pure white only inside colored buttons, solid badges, and gradients */
+  button.text-white,
+  button .text-white,
+  button.bg-gradient-to-r,
+  button.bg-indigo-600,
+  button.bg-cyan-600,
+  button.bg-emerald-600,
+  button.bg-purple-600,
+  button.bg-red-600,
+  a.bg-gradient-to-r,
+  .bg-gradient-to-r,
+  .bg-gradient-to-r *,
+  .bg-indigo-600 *,
+  .bg-cyan-600 *,
+  .bg-emerald-600 *,
+  .bg-purple-600 *,
+  .bg-red-600 *,
+  button[class*="bg-cyan-"],
+  button[class*="bg-indigo-"],
+  button[class*="bg-purple-"],
+  button[class*="bg-emerald-"] {
+    color: #ffffff !important;
+  }
+
+  /* Fix inputs & textareas for light theme */
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  /* Ensure card backgrounds and borders are clean */
+  .bg-slate-900,
+  .bg-slate-900\/90,
+  .bg-slate-900\/80,
+  .bg-slate-900\/60 {
+    background-color: #ffffff !important;
+  }
+
+  .bg-slate-950,
+  .bg-slate-950\/90,
+  .bg-slate-950\/80,
+  .bg-slate-950\/60,
+  .bg-slate-950\/40 {
+    background-color: #f8fafc !important;
+  }
+
   .border-slate-800,
   .border-slate-800\/80,
   .border-slate-800\/90 {
-    border-color: #e2e8f0;
+    border-color: #e2e8f0 !important;
   }
 }
 
