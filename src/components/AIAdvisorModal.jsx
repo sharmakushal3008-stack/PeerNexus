@@ -18,7 +18,7 @@ export default function AIAdvisorModal({ isOpen, onClose, currentUser }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: `Hello ${currentUser.name}! I am your CampusForge AI Academic & Teammate Advisor. Ask me for project ideation based on your tech stack, capstone proposal writing tips, or missing teammate role suggestions!`
+      content: `Hello ${currentUser.name}! I am your PeerNexus AI Academic & Teammate Advisor. Ask me for project ideation based on your tech stack, capstone proposal writing tips, or missing teammate role suggestions!`
     }
   ]);
   const [loading, setLoading] = useState(false);
@@ -106,17 +106,17 @@ export default function AIAdvisorModal({ isOpen, onClose, currentUser }) {
         <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center gap-2 overflow-x-auto text-xs">
           <button
             onClick={() => handleSend('Suggest 3 novel final year CS capstone project ideas using React and PyTorch')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-850 hover:bg-slate-800 text-indigo-500 font-semibold border border-slate-700 whitespace-nowrap shadow-xs transition"
           >
-            <Lightbulb className="h-3.5 w-3.5 text-amber-400" />
+            <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
             Suggest Project Ideas
           </button>
 
           <button
             onClick={() => handleSend('How can I structure my final year CS project report for maximum marks?')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-purple-300 border border-slate-700 whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-850 hover:bg-slate-800 text-purple-500 font-semibold border border-slate-700 whitespace-nowrap shadow-xs transition"
           >
-            <FileText className="h-3.5 w-3.5 text-purple-400" />
+            <FileText className="h-3.5 w-3.5 text-purple-500" />
             Viva & Report Tips
           </button>
         </div>
