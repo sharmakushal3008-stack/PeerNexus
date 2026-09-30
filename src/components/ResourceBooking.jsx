@@ -29,13 +29,13 @@ export default function ResourceBooking({ resources, workshops, onBookResource, 
     <div className="space-y-8">
       
       {/* Banner */}
-      <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 p-6 md:p-8 rounded-2xl border border-blue-500/30 shadow-xl">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30 mb-2">
-          <Calendar className="h-3.5 w-3.5 text-blue-400" />
+      <div className="bg-slate-900 border border-slate-800 p-6 md:p-8 rounded-3xl shadow-sm space-y-2">
+        <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
+          <Calendar className="h-3.5 w-3.5 text-indigo-500" />
           Campus Infrastructure Management
         </span>
-        <h1 className="text-2xl font-extrabold text-white">Campus Lab & Discussion Room Booking</h1>
-        <p className="text-sm text-slate-300 mt-1 max-w-2xl">
+        <h1 className="text-2xl font-extrabold text-slate-100">Campus Lab & Discussion Room Booking</h1>
+        <p className="text-xs md:text-sm text-slate-400 max-w-2xl leading-relaxed">
           Reserve high-performance GPU workstations (NVIDIA RTX 4090s), discussion rooms for hackathon team meetings, or register for peer-led technical workshops.
         </p>
       </div>
