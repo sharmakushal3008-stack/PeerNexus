@@ -50,6 +50,12 @@ export default function ProfileDashboard({
   const incomingRequests = tradeRequests.filter(t => t.receiverId === currentUser.id);
   const outgoingRequests = tradeRequests.filter(t => t.senderId === currentUser.id);
 
+  const completedTradesCount = tradeRequests.filter(
+    t => (t.senderId === currentUser.id || t.receiverId === currentUser.id) && t.status === 'Completed'
+  ).length;
+
+  const displayTradesCount = Math.max(currentUser.completedTrades || 0, completedTradesCount);
+
   const handleConfirmCompletion = () => {
     if (!ratingModalTrade) return;
     onCompleteTrade(ratingModalTrade, givenRating);
@@ -110,7 +116,7 @@ export default function ProfileDashboard({
             </div>
             <div>
               <div className="text-xs text-slate-400 font-semibold">Trades</div>
-              <div className="text-lg font-black text-cyan-400">{currentUser.completedTrades || 0}</div>
+              <div className="text-lg font-black text-cyan-400">{displayTradesCount}</div>
             </div>
           </div>
 

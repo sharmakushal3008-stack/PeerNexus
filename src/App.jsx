@@ -182,7 +182,8 @@ export default function App() {
         return {
           ...u,
           credits: u.credits + tradeObj.creditsRequired,
-          reputation: Math.min(100, u.reputation + 3)
+          reputation: Math.min(100, u.reputation + 3),
+          completedTrades: (u.completedTrades || 0) + 1
         };
       }
       if (u.id === tradeObj.senderId) {
