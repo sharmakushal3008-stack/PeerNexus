@@ -15,7 +15,10 @@ import {
   Copy,
   Save,
   LogOut,
-  FileText
+  Maximize2,
+  Minimize2,
+  Volume2,
+  Layers
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { storageService } from '../services/storageService';
@@ -122,6 +125,7 @@ export default function ActiveSessionRoomModal({
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
   const [activeTab, setActiveTab] = useState('video'); // 'video' | 'scratchpad' | 'chat'
+  const [isPipMinimized, setIsPipMinimized] = useState(false);
   const [notesText, setNotesText] = useState(`// Peer Session Notes & Code Scratchpad\n// Topic: ${trade?.skillOffered || 'Skill Barter'}\n\nfunction calculateMatrix() {\n  console.log("Collaborative code editing during mentoring...");\n}`);
   const [inputMsg, setInputMsg] = useState('');
   const [mediaError, setMediaError] = useState(null);
@@ -162,7 +166,7 @@ export default function ActiveSessionRoomModal({
 
   // Triple-Redundant Signal Broadcast (Supabase Realtime + BroadcastChannel + Storage Sync)
   const sendSignal = useCallback((payload) => {
-    const fullSignal = { ...payload, roomKey: `room_${trade.id}`, timestamp: Date.now() };
+    const fullSignal = { ...payload, roomKey: `room_${trade?.id}`, timestamp: Date.now() };
 
     if (supabaseChannelRef.current) {
       supabaseChannelRef.current.send({
@@ -175,7 +179,7 @@ export default function ActiveSessionRoomModal({
       roomChannelRef.current.postMessage(fullSignal);
     }
     try {
-      localStorage.setItem(`cf_signal_${trade.id}`, JSON.stringify(fullSignal));
+      localStorage.setItem(`cf_signal_${trade?.id}`, JSON.stringify(fullSignal));
       storageService.notifySync();
     } catch (e) {}
   }, [trade?.id]);
@@ -266,7 +270,7 @@ export default function ActiveSessionRoomModal({
       }
       return;
     }
-  }, [currentUser.id, sendSignal]);
+  }, [currentUser.id, sendSignal, otherPersonName]);
 
   // Callback ref for Local Video Node
   const setLocalVideoNode = useCallback((node) => {
@@ -280,8 +284,8 @@ export default function ActiveSessionRoomModal({
   // Callback ref for Remote Video Node
   const setRemoteVideoNode = useCallback((node) => {
     remoteVideoRef.current = node;
-    if (node && (remoteVideoRef.current?.srcObject || remoteSyntheticStreamRef.current)) {
-      if (!node.srcObject && remoteSyntheticStreamRef.current) {
+    if (node) {
+      if (remoteSyntheticStreamRef.current && !node.srcObject) {
         node.srcObject = remoteSyntheticStreamRef.current;
       }
       node.play().catch(err => console.warn('Remote video play:', err));
@@ -448,51 +452,41 @@ export default function ActiveSessionRoomModal({
         supabase.removeChannel(supabaseChannelRef.current);
         supabaseChannelRef.current = null;
       }
-      setIsStreamActive(false);
-      setIsRemoteConnected(false);
     };
-  }, [isOpen, trade?.id, currentUser.id, handleIncomingSignal, otherPersonName, sendSignal]);
+  }, [isOpen, trade?.id, currentUser.id, currentUser.name, otherPersonName, sendSignal, handleIncomingSignal]);
 
-  // Download Notes as .md File
+  // Export Notes to Markdown File
   const handleDownloadNotes = () => {
-    try {
-      const topicName = (trade.skillOffered || 'Session').replace(/[^a-zA-Z0-9]/g, '_');
-      const filename = `PeerNexus_Notes_${topicName}.md`;
-      const blob = new Blob([notesText], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      setExportNotice('Downloaded notes file (.md)!');
-      setTimeout(() => setExportNotice(null), 3000);
-    } catch (e) {
-      console.warn('Download notes error:', e);
-    }
+    const filename = `PeerNexus_Session_${trade.skillOffered.replace(/[^a-zA-Z0-9]/g, '_')}_Notes.md`;
+    const blob = new Blob([notesText], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportNotice('Exported notes as Markdown file!');
+    setTimeout(() => setExportNotice(null), 3000);
   };
 
   // Export Notes to Local Storage Library
   const handleSaveNotesToLibrary = () => {
     try {
       const existing = JSON.parse(localStorage.getItem('cf_user_notes_library') || '[]');
-      const newNote = {
-        id: `note-${Date.now()}`,
-        topic: trade.skillOffered || 'Skill Barter Session',
+      const noteItem = {
+        id: `lib-note-${Date.now()}`,
+        topic: trade.skillOffered,
         peer: otherPersonName,
-        content: notesText,
-        savedAt: new Date().toLocaleString()
+        savedAt: new Date().toLocaleString(),
+        content: notesText
       };
-      localStorage.setItem('cf_user_notes_library', JSON.stringify([newNote, ...existing]));
+      existing.unshift(noteItem);
+      localStorage.setItem('cf_user_notes_library', JSON.stringify(existing));
       storageService.notifySync();
-
       setExportNotice('Saved notes to your Local Storage Library!');
       setTimeout(() => setExportNotice(null), 3000);
     } catch (e) {
-      console.warn('Save notes library error:', e);
+      console.warn('Save notes error:', e);
     }
   };
 
@@ -504,30 +498,6 @@ export default function ActiveSessionRoomModal({
       setTimeout(() => setExportNotice(null), 3000);
     } catch (e) {}
   };
-
-  // Re-bind remote & local video tags when tab switches back to 'video'
-  useEffect(() => {
-    if (activeTab === 'video') {
-      if (localVideoRef.current && mediaStreamRef.current) {
-        localVideoRef.current.srcObject = mediaStreamRef.current;
-        localVideoRef.current.play().catch(e => console.warn(e));
-      }
-      if (remoteVideoRef.current) {
-        if (peerConnectionRef.current) {
-          const receivers = peerConnectionRef.current.getReceivers();
-          if (receivers && receivers.length > 0 && receivers[0].track) {
-            const remoteStream = new MediaStream([receivers[0].track]);
-            remoteVideoRef.current.srcObject = remoteStream;
-          } else if (remoteSyntheticStreamRef.current) {
-            remoteVideoRef.current.srcObject = remoteSyntheticStreamRef.current;
-          }
-        } else if (remoteSyntheticStreamRef.current) {
-          remoteVideoRef.current.srcObject = remoteSyntheticStreamRef.current;
-        }
-        remoteVideoRef.current.play().catch(e => console.warn(e));
-      }
-    }
-  }, [activeTab]);
 
   // Storage & Sync listener for signals and real-time collaborative notes
   useEffect(() => {
@@ -633,12 +603,14 @@ export default function ActiveSessionRoomModal({
     setInputMsg('');
   };
 
+  const isPipMode = activeTab !== 'video';
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full h-[92vh] sm:h-[680px] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full h-[92vh] sm:h-[680px] flex flex-col shadow-2xl overflow-hidden relative">
         
         {/* RESPONSIVE HEADER */}
-        <div className="p-3 sm:p-4 bg-slate-950 border-b border-slate-800 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div className="p-3 sm:p-4 bg-slate-950 border-b border-slate-800 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between shrink-0">
           
           <div className="flex items-center gap-2.5 min-w-0 w-full sm:w-auto">
             <div className="h-9 w-9 rounded-xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center shrink-0">
@@ -650,6 +622,12 @@ export default function ActiveSessionRoomModal({
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
                   LIVE • Escrow ({trade.creditsRequired} Cr)
                 </span>
+                {isPipMode && (
+                  <span className="text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded font-semibold flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Video Call in PiP Corner
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-400 truncate">
                 Topic: <strong className="text-slate-200">{trade.skillOffered}</strong> with <strong className="text-cyan-300">{otherPersonName}</strong>
@@ -678,7 +656,7 @@ export default function ActiveSessionRoomModal({
         </div>
 
         {/* RESPONSIVE VIEW CONTROLS TOOLBAR */}
-        <div className="px-3 sm:px-4 py-2 bg-slate-950/60 border-b border-slate-800/80 flex items-center gap-1.5 overflow-x-auto text-xs">
+        <div className="px-3 sm:px-4 py-2 bg-slate-950/60 border-b border-slate-800/80 flex items-center gap-1.5 overflow-x-auto text-xs shrink-0">
           <button
             onClick={() => setActiveTab('video')}
             className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
@@ -686,7 +664,7 @@ export default function ActiveSessionRoomModal({
             }`}
           >
             <Video className="h-3.5 w-3.5" />
-            <span>Video Call Room</span>
+            <span>Video Call Room (Full)</span>
           </button>
           <button
             onClick={() => setActiveTab('scratchpad')}
@@ -708,8 +686,8 @@ export default function ActiveSessionRoomModal({
           </button>
         </div>
 
-        {/* MAIN BODY */}
-        <div className="flex-1 overflow-hidden bg-slate-950/40 p-3 sm:p-4 flex flex-col">
+        {/* MAIN BODY WORKSPACE */}
+        <div className="flex-1 overflow-hidden bg-slate-950/40 p-3 sm:p-4 flex flex-col relative min-h-0">
           
           {peerNotice && (
             <div className="p-3 bg-amber-950/90 border border-amber-500/50 rounded-2xl text-amber-200 text-xs font-semibold flex items-center justify-between mb-3 shadow-lg shrink-0">
@@ -720,103 +698,6 @@ export default function ActiveSessionRoomModal({
               <button onClick={() => setPeerNotice(null)} className="text-amber-400 hover:text-white p-1">
                 <X className="h-4 w-4" />
               </button>
-            </div>
-          )}
-
-          {/* TAB 1: VIDEO CALL ROOM WITH BI-DIRECTIONAL WEBRTC PEER STREAMS */}
-          {activeTab === 'video' && (
-            <div className="h-full flex flex-col justify-between space-y-3">
-              
-              {mediaError && (
-                <div className="p-2.5 bg-amber-950/60 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
-                  <span>{mediaError}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 flex-1 min-h-0">
-                
-                {/* 1. LOCAL CAMERA FEED */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl relative overflow-hidden flex items-center justify-center group">
-                  <video
-                    ref={setLocalVideoNode}
-                    autoPlay
-                    playsInline
-                    muted
-                    style={{ display: isVideoOn && !mediaError ? 'block' : 'none' }}
-                    className="w-full h-full object-cover rounded-2xl"
-                  />
-
-                  {(!isVideoOn || mediaError) && (
-                    <div className="text-center space-y-2 p-4">
-                      <img src={currentUser.avatar} alt="" className="h-16 sm:h-20 w-16 sm:w-20 rounded-full mx-auto border-2 border-cyan-500 object-cover shadow-xl" />
-                      <div>
-                        <div className="text-xs sm:text-sm font-bold text-white">{currentUser.name} (You)</div>
-                        <div className="text-[11px] text-amber-400 font-semibold mt-0.5">
-                          {mediaError ? 'Camera Disabled' : 'Camera Muted'}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="absolute bottom-3 left-3 bg-slate-950/90 backdrop-blur-md border border-slate-800 px-2.5 py-1 rounded-lg text-[10px] text-cyan-300 font-mono flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${isStreamActive ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
-                    <span>{isStreamActive ? 'Local Hardware Feed' : 'Local Stream'}</span>
-                  </div>
-                </div>
-
-                {/* 2. REMOTE PEER CAMERA STREAM */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl relative overflow-hidden flex items-center justify-center">
-                  <video
-                    ref={setRemoteVideoNode}
-                    autoPlay
-                    playsInline
-                    style={{ display: isRemoteConnected ? 'block' : 'none' }}
-                    className="w-full h-full object-cover rounded-2xl"
-                  />
-
-                  {!isRemoteConnected && (
-                    <div className="text-center space-y-3 p-4">
-                      <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-full mx-auto bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-xl font-bold text-white shadow-xl">
-                        {otherPersonName.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="text-xs sm:text-sm font-bold text-white">{otherPersonName}</div>
-                        <div className="text-[11px] text-indigo-400 font-semibold flex items-center justify-center gap-1 mt-1">
-                          <span className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse" />
-                          <span>Peer Connected • Awaiting Stream</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="absolute bottom-3 left-3 bg-slate-950/90 backdrop-blur-md border border-slate-800 px-2.5 py-1 rounded-lg text-[10px] text-indigo-300 font-mono flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${isRemoteConnected ? 'bg-emerald-400 animate-ping' : 'bg-indigo-400'}`} />
-                    <span>{isRemoteConnected ? 'Peer Live Feed' : 'Peer Stream • Encrypted STUN'}</span>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Video & Mic Hardware Controls */}
-              <div className="flex items-center justify-center gap-3 bg-slate-900 p-2.5 rounded-2xl border border-slate-800 w-fit mx-auto shadow-xl">
-                <button
-                  onClick={handleToggleMic}
-                  className={`p-3 rounded-xl transition ${isMicOn ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-red-600 text-white'}`}
-                  title={isMicOn ? "Mute Microphone" : "Unmute Microphone"}
-                >
-                  {isMicOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
-                </button>
-
-                <button
-                  onClick={handleToggleVideo}
-                  className={`p-3 rounded-xl transition ${isVideoOn ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-red-600 text-white'}`}
-                  title={isVideoOn ? "Turn Off Camera" : "Turn On Camera"}
-                >
-                  {isVideoOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-                </button>
-              </div>
-
             </div>
           )}
 
@@ -925,6 +806,245 @@ export default function ActiveSessionRoomModal({
             </div>
           )}
 
+          {/* PERSISTENT VIDEO CALL LAYER: FULL VIEW OR FLOATING CORNER MINI-SCREEN (PiP) */}
+          <div 
+            className={
+              activeTab === 'video'
+                ? 'h-full flex flex-col justify-between space-y-3 w-full'
+                : isPipMinimized
+                  ? 'absolute bottom-4 right-4 z-40 bg-slate-950/95 border-2 border-cyan-500/50 rounded-2xl p-2.5 shadow-2xl backdrop-blur-xl flex items-center gap-2.5 text-xs animate-in fade-in zoom-in duration-200'
+                  : 'absolute bottom-4 right-4 z-40 w-64 sm:w-80 h-44 sm:h-52 rounded-2xl border-2 border-cyan-500/50 bg-slate-950/95 shadow-2xl backdrop-blur-xl overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200'
+            }
+          >
+            {/* 1. FULL VIEW MODE VIDEO GRID */}
+            {activeTab === 'video' && (
+              <>
+                {mediaError && (
+                  <div className="p-2.5 bg-amber-950/60 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
+                    <span>{mediaError}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 flex-1 min-h-0">
+                  
+                  {/* LOCAL CAMERA FEED */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl relative overflow-hidden flex items-center justify-center group">
+                    <video
+                      ref={setLocalVideoNode}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{ display: isVideoOn && !mediaError ? 'block' : 'none' }}
+                      className="w-full h-full object-cover rounded-2xl"
+                    />
+
+                    {(!isVideoOn || mediaError) && (
+                      <div className="text-center space-y-2 p-4">
+                        <img src={currentUser.avatar} alt="" className="h-16 sm:h-20 w-16 sm:w-20 rounded-full mx-auto border-2 border-cyan-500 object-cover shadow-xl" />
+                        <div>
+                          <div className="text-xs sm:text-sm font-bold text-white">{currentUser.name} (You)</div>
+                          <div className="text-[11px] text-amber-400 font-semibold mt-0.5">
+                            {mediaError ? 'Camera Disabled' : 'Camera Muted'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="absolute bottom-3 left-3 bg-slate-950/90 backdrop-blur-md border border-slate-800 px-2.5 py-1 rounded-lg text-[10px] text-cyan-300 font-mono flex items-center gap-1.5">
+                      <span className={`h-2 w-2 rounded-full ${isStreamActive ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
+                      <span>{isStreamActive ? 'Local Hardware Feed' : 'Local Stream'}</span>
+                    </div>
+                  </div>
+
+                  {/* REMOTE PEER CAMERA STREAM */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl relative overflow-hidden flex items-center justify-center">
+                    <video
+                      ref={setRemoteVideoNode}
+                      autoPlay
+                      playsInline
+                      style={{ display: isRemoteConnected ? 'block' : 'none' }}
+                      className="w-full h-full object-cover rounded-2xl"
+                    />
+
+                    {!isRemoteConnected && (
+                      <div className="text-center space-y-3 p-4">
+                        <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-full mx-auto bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-xl font-bold text-white shadow-xl">
+                          {otherPersonName.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-sm font-bold text-white">{otherPersonName}</div>
+                          <div className="text-[11px] text-indigo-400 font-semibold flex items-center justify-center gap-1 mt-1">
+                            <span className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse" />
+                            <span>Peer Connected • Awaiting Stream</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="absolute bottom-3 left-3 bg-slate-950/90 backdrop-blur-md border border-slate-800 px-2.5 py-1 rounded-lg text-[10px] text-indigo-300 font-mono flex items-center gap-1.5">
+                      <span className={`h-2 w-2 rounded-full ${isRemoteConnected ? 'bg-emerald-400 animate-ping' : 'bg-indigo-400'}`} />
+                      <span>{isRemoteConnected ? 'Peer Live Feed' : 'Peer Stream • Encrypted STUN'}</span>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Video & Mic Hardware Controls Toolbar */}
+                <div className="flex items-center justify-center gap-3 bg-slate-900 p-2.5 rounded-2xl border border-slate-800 w-fit mx-auto shadow-xl">
+                  <button
+                    onClick={handleToggleMic}
+                    className={`p-3 rounded-xl transition ${isMicOn ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-red-600 text-white'}`}
+                    title={isMicOn ? "Mute Microphone" : "Unmute Microphone"}
+                  >
+                    {isMicOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+                  </button>
+
+                  <button
+                    onClick={handleToggleVideo}
+                    className={`p-3 rounded-xl transition ${isVideoOn ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-red-600 text-white'}`}
+                    title={isVideoOn ? "Turn Off Camera" : "Turn On Camera"}
+                  >
+                    {isVideoOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                  </button>
+
+                  <div className="h-6 w-px bg-slate-800 mx-1" />
+
+                  <button
+                    onClick={() => setActiveTab('scratchpad')}
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 transition"
+                    title="Open Code & Notes with Mini Video Corner"
+                  >
+                    <Code className="h-4 w-4" />
+                    <span>Open Code (with PiP Video)</span>
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* 2. FLOATING CORNER MINI-SCREEN (PiP) MODE */}
+            {isPipMode && (
+              <>
+                {isPipMinimized ? (
+                  // Compact Audio / Mini Call Badge
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="font-bold text-white">{otherPersonName}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={handleToggleMic}
+                        className={`p-1.5 rounded-lg text-xs ${isMicOn ? 'bg-slate-800 text-slate-200' : 'bg-red-600 text-white'}`}
+                        title={isMicOn ? "Mute" : "Unmute"}
+                      >
+                        {isMicOn ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => setIsPipMinimized(false)}
+                        className="p-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg"
+                        title="Show Mini Video"
+                      >
+                        <Video className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('video')}
+                        className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg"
+                        title="Expand to Fullscreen Video"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Full Floating Mini Video Player
+                  <div className="h-full flex flex-col">
+                    {/* Mini PiP Header Bar */}
+                    <div className="px-3 py-1.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between text-[11px] shrink-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                        <span className="font-bold text-slate-100 truncate">{otherPersonName}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={handleToggleMic}
+                          className={`p-1 rounded-md transition ${isMicOn ? 'text-slate-300 hover:text-white' : 'text-red-400 bg-red-950/60'}`}
+                          title={isMicOn ? "Mute Mic" : "Unmute Mic"}
+                        >
+                          {isMicOn ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          onClick={handleToggleVideo}
+                          className={`p-1 rounded-md transition ${isVideoOn ? 'text-slate-300 hover:text-white' : 'text-red-400 bg-red-950/60'}`}
+                          title={isVideoOn ? "Turn Off Camera" : "Turn On Camera"}
+                        >
+                          {isVideoOn ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('video')}
+                          className="p-1 text-cyan-400 hover:text-white rounded-md transition"
+                          title="Expand Full Video"
+                        >
+                          <Maximize2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setIsPipMinimized(true)}
+                          className="p-1 text-slate-400 hover:text-white rounded-md transition"
+                          title="Minimize to Call Badge"
+                        >
+                          <Minimize2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Mini Video Feed (Remote Peer + Local PiP Selfie) */}
+                    <div className="flex-1 relative bg-slate-950 flex items-center justify-center overflow-hidden">
+                      {/* Peer Main Video */}
+                      <video
+                        ref={setRemoteVideoNode}
+                        autoPlay
+                        playsInline
+                        style={{ display: isRemoteConnected ? 'block' : 'none' }}
+                        className="w-full h-full object-cover"
+                      />
+
+                      {!isRemoteConnected && (
+                        <div className="text-center p-2">
+                          <div className="h-10 w-10 rounded-full mx-auto bg-indigo-600 flex items-center justify-center text-sm font-bold text-white shadow">
+                            {otherPersonName.charAt(0)}
+                          </div>
+                          <div className="text-[10px] text-indigo-300 font-semibold mt-1">Live Audio Connected</div>
+                        </div>
+                      )}
+
+                      {/* Your Selfie PiP Badge in Corner */}
+                      <div className="absolute bottom-2 right-2 w-16 sm:w-20 h-12 sm:h-14 rounded-xl border border-cyan-400/80 bg-slate-900 shadow-xl overflow-hidden flex items-center justify-center">
+                        <video
+                          ref={setLocalVideoNode}
+                          autoPlay
+                          playsInline
+                          muted
+                          style={{ display: isVideoOn && !mediaError ? 'block' : 'none' }}
+                          className="w-full h-full object-cover"
+                        />
+                        {(!isVideoOn || mediaError) && (
+                          <div className="text-[9px] text-amber-400 font-bold text-center">Cam Muted</div>
+                        )}
+                      </div>
+
+                      {/* Small Live Badge */}
+                      <div className="absolute top-2 left-2 bg-slate-950/80 px-2 py-0.5 rounded text-[9px] font-mono text-emerald-400 border border-emerald-500/30">
+                        LIVE PiP
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
         </div>
 
       </div>
@@ -948,40 +1068,37 @@ export default function ActiveSessionRoomModal({
                 If you have <strong className="text-emerald-400">completed learning</strong>, you can end the session completely to release escrow credits ({trade.creditsRequired} Cr) and rate your peer.
               </p>
               <p className="leading-relaxed text-slate-400">
-                If you have <strong className="text-cyan-300">not completed learning yet</strong>, you can pause the session for now. The room will remain active so both peers can re-enter anytime later!
+                Or you can simply close this room window and return anytime while the session remains active.
               </p>
             </div>
 
-            <div className="space-y-2.5 pt-1">
+            <div className="flex flex-col gap-2 pt-2">
               <button
                 onClick={() => {
                   setShowEndDialog(false);
                   onCompleteTrade(trade);
                 }}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg flex items-center justify-center gap-2 transition"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs shadow-lg flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                <span>Completed Learning (End & Release Escrow)</span>
+                Complete Session & Transfer {trade.creditsRequired} Credits
               </button>
 
               <button
                 onClick={() => {
                   setShowEndDialog(false);
-                  if (mediaStreamRef.current) {
-                    mediaStreamRef.current.getTracks().forEach(t => t.stop());
-                  }
                   onClose();
                 }}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700/80 text-xs font-semibold flex items-center justify-center gap-2 transition"
+                className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs"
               >
-                <span>Pause Session for Now (Resume Later)</span>
+                Just Close Room Window (Keep Session Active)
               </button>
 
               <button
                 onClick={() => setShowEndDialog(false)}
-                className="w-full py-2 rounded-xl text-slate-400 hover:text-white text-xs font-medium transition text-center"
+                className="w-full py-1.5 text-slate-500 hover:text-slate-400 text-xs font-medium"
               >
-                Cancel / Return to Live Room
+                Cancel & Resume Room
               </button>
             </div>
           </div>
