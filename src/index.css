@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 @theme {
+  --color-white: #0f172a;
+  
   --color-slate-950: #f8fafc;
   --color-slate-900: #ffffff;
   --color-slate-850: #f1f5f9;
@@ -16,9 +18,9 @@
 
   --color-cyan-600: #4338ca;
   --color-cyan-500: #4f46e5;
-  --color-cyan-400: #4338ca;
-  --color-cyan-300: #3730a3;
-  --color-cyan-200: #312e81;
+  --color-cyan-400: #4f46e5;
+  --color-cyan-300: #4338ca;
+  --color-cyan-200: #3730a3;
   --color-cyan-100: #e0e7ff;
   --color-cyan-50: #eef2ff;
 
@@ -27,9 +29,9 @@
   --color-indigo-800: #7dd3fc;
   --color-indigo-700: #0369a1;
   --color-indigo-600: #0284c7;
-  --color-indigo-500: #0369a1;
-  --color-indigo-400: #075985;
-  --color-indigo-300: #0c4a6e;
+  --color-indigo-500: #0ea5e9;
+  --color-indigo-400: #0284c7;
+  --color-indigo-300: #0369a1;
 
   --color-purple-950: #f5f3ff;
   --color-purple-900: #ede9fe;
@@ -42,15 +44,15 @@
   --color-emerald-900: #dcfce7;
   --color-emerald-600: #059669;
   --color-emerald-500: #047857;
-  --color-emerald-400: #065f46;
-  --color-emerald-300: #064e3b;
+  --color-emerald-400: #047857;
+  --color-emerald-300: #065f46;
 
   --color-amber-950: #fffbeb;
   --color-amber-900: #fef3c7;
   --color-amber-600: #d97706;
   --color-amber-500: #b45309;
-  --color-amber-400: #92400e;
-  --color-amber-300: #78350f;
+  --color-amber-400: #b45309;
+  --color-amber-300: #92400e;
 
   --color-red-950: #fef2f2;
   --color-red-900: #fee2e2;
@@ -70,40 +72,55 @@
   }
 
   /* All titles and text default to crisp dark readable slate */
-  h1, h2, h3, h4, h5, h6 {
-    color: #0f172a;
+  h1, h2, h3, h4, h5, h6, p, span, div, label, td, th {
+    color: inherit;
   }
 
-  /* High contrast text overrides for light surfaces */
-  .text-white {
-    color: #0f172a;
-  }
-
-  /* Keep pure white only inside colored buttons, solid badges, and gradients */
-  button.text-white,
-  button .text-white,
-  button.bg-gradient-to-r,
-  button.bg-indigo-600,
-  button.bg-cyan-600,
-  button.bg-emerald-600,
-  button.bg-purple-600,
-  button.bg-red-600,
-  a.bg-gradient-to-r,
+  /* Solid colored buttons & gradients retain pure white text */
   .bg-gradient-to-r,
-  .bg-gradient-to-r *,
-  .bg-indigo-600 *,
-  .bg-cyan-600 *,
-  .bg-emerald-600 *,
-  .bg-purple-600 *,
-  .bg-red-600 *,
-  button[class*="bg-cyan-"],
-  button[class*="bg-indigo-"],
-  button[class*="bg-purple-"],
-  button[class*="bg-emerald-"] {
+  .bg-gradient-to-tr,
+  .bg-indigo-600,
+  .bg-cyan-600,
+  .bg-cyan-500,
+  .bg-emerald-600,
+  .bg-purple-600,
+  .bg-red-600 {
     color: #ffffff !important;
   }
 
-  /* Fix inputs & textareas for light theme */
+  .bg-gradient-to-r *,
+  .bg-gradient-to-tr *,
+  .bg-indigo-600 *,
+  .bg-cyan-600 *,
+  .bg-cyan-500 *,
+  .bg-emerald-600 *,
+  .bg-purple-600 *,
+  .bg-red-600 * {
+    color: #ffffff !important;
+  }
+
+  /* Secondary ghost / outlined buttons */
+  button.bg-slate-900,
+  button.bg-slate-950,
+  button.bg-slate-800,
+  button.bg-transparent,
+  button[class*="bg-slate-900"],
+  button[class*="bg-slate-950"],
+  button[class*="bg-slate-800"] {
+    color: #0f172a !important;
+  }
+
+  button.bg-slate-900 *,
+  button.bg-slate-950 *,
+  button.bg-slate-800 *,
+  button.bg-transparent *,
+  button[class*="bg-slate-900"] *,
+  button[class*="bg-slate-950"] *,
+  button[class*="bg-slate-800"] * {
+    color: #0f172a !important;
+  }
+
+  /* Inputs & textareas for light theme */
   input:not([type="checkbox"]):not([type="radio"]),
   textarea,
   select {
@@ -116,7 +133,7 @@
     color: #94a3b8 !important;
   }
 
-  /* Ensure card backgrounds and borders are clean */
+  /* Card backgrounds and borders */
   .bg-slate-900,
   .bg-slate-900\/90,
   .bg-slate-900\/80,
