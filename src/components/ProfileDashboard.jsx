@@ -25,7 +25,10 @@ import {
   Video,
   MessageSquare,
   Globe,
-  Copy
+  Copy,
+  Trash2,
+  ArrowRightLeft,
+  PlusCircle
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
 
@@ -33,13 +36,15 @@ export default function ProfileDashboard({
   currentUser, 
   tradeRequests, 
   userProjects, 
+  skillOffers = [],
   onEditProfile,
   onResetData,
   onAcceptTradeRequest,
   onDeclineTradeRequest,
   onCompleteTrade,
   onOpenSessionRoom,
-  onOpenChat
+  onOpenChat,
+  onDeleteSkillOffer
 }) {
   const fileInputRef = useRef(null);
   const [ratingModalTrade, setRatingModalTrade] = useState(null);
@@ -49,6 +54,7 @@ export default function ProfileDashboard({
   // Separate incoming vs outgoing trade requests
   const incomingRequests = tradeRequests.filter(t => t.receiverId === currentUser.id);
   const outgoingRequests = tradeRequests.filter(t => t.senderId === currentUser.id);
+  const mySkillOffers = (skillOffers || []).filter(s => s.authorId === currentUser?.id);
 
   const completedTradesCount = tradeRequests.filter(
     t => (t.senderId === currentUser.id || t.receiverId === currentUser.id) && t.status === 'Completed'
@@ -289,6 +295,60 @@ export default function ProfileDashboard({
           )}
         </div>
 
+      </div>
+
+      {/* MY ACTIVE SKILL LISTINGS SECTION */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-white flex items-center gap-2">
+            <ArrowRightLeft className="h-4 w-4 text-emerald-400" />
+            My Active Skill Listings ({mySkillOffers.length})
+          </h2>
+          <span className="text-[11px] text-slate-400 font-mono">Live on Campus Marketplace</span>
+        </div>
+
+        {mySkillOffers.length === 0 ? (
+          <div className="text-center py-8 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-500">
+            You have not published any skill listings yet. Head over to the Skill Barter tab to post your first skill offer and earn +50 credits!
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {mySkillOffers.map((offer) => (
+              <div key={offer.id} className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3 flex flex-col justify-between text-xs">
+                <div>
+                  <div className="flex items-center justify-between font-bold text-white">
+                    <span className="text-emerald-400 font-semibold">{offer.skillOffered}</span>
+                    <span className="px-2 py-0.5 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded font-bold">
+                      {offer.creditsRequired} Cr
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-1">
+                    Seeking to learn: <span className="text-cyan-300 font-semibold">{offer.skillWanted}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">Category: {offer.category}</div>
+                  <p className="mt-2 text-slate-300 line-clamp-2 leading-relaxed">
+                    {offer.description || 'Hands-on peer mentoring session.'}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-900">
+                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-bold">
+                    Active on Marketplace
+                  </span>
+                  {onDeleteSkillOffer && (
+                    <button
+                      onClick={() => onDeleteSkillOffer(offer.id)}
+                      className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 text-red-300 rounded font-semibold text-[11px] flex items-center gap-1 border border-red-500/30 transition"
+                      title="Remove Listing"
+                    >
+                      <Trash2 className="h-3 w-3" /> Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* SAVED NOTES LIBRARY SECTION */}

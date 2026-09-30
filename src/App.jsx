@@ -224,6 +224,14 @@ export default function App() {
     showToast(`Skill offer "${newOffer.skillOffered}" published! Earned +50 Credits! 🎉`);
   };
 
+  // Delete / Withdraw Skill Offer
+  const handleDeleteSkillOffer = async (skillId) => {
+    const updatedSkills = skillOffers.filter(s => s.id !== skillId);
+    setSkillOffers(updatedSkills);
+    await storageService.saveSkillOffers(updatedSkills);
+    showToast(`Skill listing removed from campus marketplace.`);
+  };
+
   // Apply to Project Role (Pushed to Supabase Cloud)
   const handleApplyToRole = async (project, roleName) => {
     if (!currentUser) return;
@@ -429,6 +437,7 @@ export default function App() {
               currentUser={currentUser}
               onTradeRequest={handleTradeRequest}
               onAddNewSkillOffer={handleAddNewSkillOffer}
+              onDeleteSkillOffer={handleDeleteSkillOffer}
               onOpenChat={(recipient) => setChatRecipient(recipient)}
             />
           )}
@@ -465,6 +474,7 @@ export default function App() {
             <ProfileDashboard
               currentUser={currentUser}
               tradeRequests={tradeRequests}
+              skillOffers={skillOffers}
               userProjects={projects.filter(p => p.leadId === currentUser.id || (p.leadName && p.leadName.includes(currentUser.name)))}
               onEditProfile={() => setIsEditProfileOpen(true)}
               onResetData={handleWipeData}
@@ -473,6 +483,7 @@ export default function App() {
               onCompleteTrade={handleCompleteTrade}
               onOpenSessionRoom={(tradeObj) => setActiveSessionTrade(tradeObj)}
               onOpenChat={(recipient) => setChatRecipient(recipient)}
+              onDeleteSkillOffer={handleDeleteSkillOffer}
             />
           )}
 
