@@ -3,43 +3,48 @@
 @theme {
   --color-white: #0f172a;
   
-  --color-slate-950: #f8fafc;
+  /* Canvas & Card Surfaces (Engineering Blueprint Theme) */
+  --color-slate-950: #f0f4f9;
   --color-slate-900: #ffffff;
-  --color-slate-850: #f1f5f9;
-  --color-slate-800: #e2e8f0;
-  --color-slate-700: #cbd5e1;
+  --color-slate-850: #e8eef6;
+  --color-slate-800: #dbe4ef;
+  --color-slate-700: #cbd7e6;
   --color-slate-600: #64748b;
   --color-slate-500: #475569;
   --color-slate-400: #334155;
   --color-slate-300: #1e293b;
   --color-slate-200: #0f172a;
-  --color-slate-100: #020617;
-  --color-slate-50: #020617;
+  --color-slate-100: #030712;
+  --color-slate-50: #030712;
 
-  --color-cyan-600: #4338ca;
-  --color-cyan-500: #4f46e5;
-  --color-cyan-400: #4f46e5;
-  --color-cyan-300: #4338ca;
-  --color-cyan-200: #3730a3;
-  --color-cyan-100: #e0e7ff;
-  --color-cyan-50: #eef2ff;
+  /* Primary Brand: Blueprint Cobalt Blue */
+  --color-cyan-600: #1e40af;
+  --color-cyan-500: #1d4ed8;
+  --color-cyan-400: #2563eb;
+  --color-cyan-300: #1d4ed8;
+  --color-cyan-200: #3b82f6;
+  --color-cyan-100: #dbeafe;
+  --color-cyan-50: #eff6ff;
 
+  /* Secondary Accent: Technical Sky & Azure */
   --color-indigo-950: #e0f2fe;
   --color-indigo-900: #bae6fd;
   --color-indigo-800: #7dd3fc;
-  --color-indigo-700: #0369a1;
-  --color-indigo-600: #0284c7;
-  --color-indigo-500: #0ea5e9;
+  --color-indigo-700: #0284c7;
+  --color-indigo-600: #0369a1;
+  --color-indigo-500: #0284c7;
   --color-indigo-400: #0284c7;
   --color-indigo-300: #0369a1;
 
+  /* Deep Violet for Capstone Mentors */
   --color-purple-950: #f5f3ff;
   --color-purple-900: #ede9fe;
-  --color-purple-600: #7c3aed;
-  --color-purple-500: #6d28d9;
+  --color-purple-600: #6d28d9;
+  --color-purple-500: #7c3aed;
   --color-purple-400: #5b21b6;
   --color-purple-300: #4c1d95;
 
+  /* Verified & Live Streams: Technical Emerald */
   --color-emerald-950: #f0fdf4;
   --color-emerald-900: #dcfce7;
   --color-emerald-600: #059669;
@@ -47,13 +52,15 @@
   --color-emerald-400: #047857;
   --color-emerald-300: #065f46;
 
+  /* Amber Bronze for Credits & Hardware Workstations */
   --color-amber-950: #fffbeb;
   --color-amber-900: #fef3c7;
-  --color-amber-600: #d97706;
-  --color-amber-500: #b45309;
+  --color-amber-600: #b45309;
+  --color-amber-500: #d97706;
   --color-amber-400: #b45309;
   --color-amber-300: #92400e;
 
+  /* Red Alerts & Warnings */
   --color-red-950: #fef2f2;
   --color-red-900: #fee2e2;
   --color-red-600: #dc2626;
@@ -64,7 +71,7 @@
 
 @layer base {
   body {
-    background-color: #f8fafc !important;
+    background-color: #f0f4f9 !important;
     color: #0f172a !important;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -120,13 +127,13 @@
     color: #0f172a !important;
   }
 
-  /* Inputs & textareas for light theme */
+  /* Inputs & textareas for Blueprint light theme */
   input:not([type="checkbox"]):not([type="radio"]),
   textarea,
   select {
     background-color: #ffffff !important;
     color: #0f172a !important;
-    border-color: #cbd5e1 !important;
+    border-color: #cbd7e6 !important;
   }
 
   input::placeholder, textarea::placeholder {
@@ -146,30 +153,30 @@
   .bg-slate-950\/80,
   .bg-slate-950\/60,
   .bg-slate-950\/40 {
-    background-color: #f8fafc !important;
+    background-color: #f0f4f9 !important;
   }
 
   .border-slate-800,
   .border-slate-800\/80,
   .border-slate-800\/90 {
-    border-color: #e2e8f0 !important;
+    border-color: #dbe4ef !important;
   }
 }
 
-/* Light Nordic Scrollbars */
+/* Light Blueprint Technical Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f8fafc;
+  background: #f0f4f9;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #cbd7e6;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #4f46e5;
+  background: #1d4ed8;
 }
 
 /* Custom Keyframes */
