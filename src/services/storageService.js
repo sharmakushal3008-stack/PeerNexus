@@ -1,5 +1,5 @@
-import { CAMPUS_RESOURCES, WORKSHOPS } from '../data/mockData';
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { CAMPUS_RESOURCES, WORKSHOPS } from '../data/mockData.js';
+import { supabase, isSupabaseConfigured } from './supabaseClient.js';
 
 const KEYS = {
   USERS: 'cf_multi_users',
@@ -18,10 +18,21 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   broadcastChannel = new BroadcastChannel('campusforge_cross_device_channel');
 }
 
+const syncListeners = new Set();
+
+if (broadcastChannel) {
+  broadcastChannel.onmessage = () => {
+    syncListeners.forEach(cb => {
+      try { cb(); } catch (e) {}
+    });
+  };
+}
+
 export const storageService = {
-  // Listen for Cross-Device / Cross-Tab updates
+  // Listen for Cross-Device / Cross-Tab / Local State updates
   subscribeToSync(callback) {
-    if (typeof window === 'undefined') return () => {};
+    if (typeof window === 'undefined' || typeof callback !== 'function') return () => {};
+    syncListeners.add(callback);
 
     const handleStorageChange = (e) => {
       if (e.key && e.key.startsWith('cf_')) {
@@ -31,18 +42,24 @@ export const storageService = {
 
     window.addEventListener('storage', handleStorageChange);
     
-    if (broadcastChannel) {
-      broadcastChannel.onmessage = () => callback();
-    }
-
     return () => {
+      syncListeners.delete(callback);
       window.removeEventListener('storage', handleStorageChange);
     };
   },
 
+  subscribeSync(callback) {
+    return this.subscribeToSync(callback);
+  },
+
   notifySync() {
+    syncListeners.forEach(cb => {
+      try { cb(); } catch (e) { console.warn('Sync listener err:', e); }
+    });
     if (broadcastChannel) {
-      broadcastChannel.postMessage({ type: 'SYNC_UPDATE', timestamp: Date.now() });
+      try {
+        broadcastChannel.postMessage({ type: 'SYNC_UPDATE', timestamp: Date.now() });
+      } catch (e) {}
     }
   },
 
@@ -199,6 +216,26 @@ export const storageService = {
     this.saveUsers(users);
     this.setActiveUserId(newUser.id);
 
+    // Auto-create initial skill listing in marketplace if skills were provided
+    if (newUser.skillsOffered && newUser.skillsOffered.length > 0) {
+      const existingSkills = this.getSkillOffers();
+      const initialListing = {
+        id: `sk-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+        authorId: newUser.id,
+        authorName: newUser.name,
+        authorAvatar: newUser.avatar,
+        authorYear: newUser.year || 'Campus Student',
+        skillOffered: newUser.skillsOffered.join(', '),
+        skillWanted: (newUser.skillsWanted && newUser.skillsWanted.length > 0) ? newUser.skillsWanted.join(', ') : 'Peer Skill Exchange',
+        category: 'Core Computer Science',
+        description: `Dedicated hands-on peer mentorship and collaborative learning session for ${newUser.skillsOffered.join(', ')}.`,
+        creditsRequired: 40,
+        rating: 5.0,
+        status: 'Online'
+      };
+      this.saveSkillOffers([initialListing, ...existingSkills]);
+    }
+
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('users').upsert({
@@ -232,26 +269,74 @@ export const storageService = {
   // --- SKILL OFFERS ---
   getSkillOffers() {
     const data = localStorage.getItem(KEYS.SKILLS);
-    return data ? JSON.parse(data) : [];
+    const skills = data ? JSON.parse(data) : [];
+    const users = this.getUsers();
+    const usersMap = {};
+    users.forEach(u => { usersMap[u.id] = u; });
+
+    return skills.map(s => {
+      const author = usersMap[s.authorId];
+      let skillOffered = s.skillOffered;
+      let skillWanted = s.skillWanted;
+
+      if (!skillOffered || skillOffered === 'Tech Assistance') {
+        if (author?.skillsOffered && author.skillsOffered.length > 0) {
+          skillOffered = author.skillsOffered.join(', ');
+        }
+      }
+
+      if (!skillWanted || skillWanted === 'Tech Assistance' || skillWanted === 'Peer Skill Exchange') {
+        if (author?.skillsWanted && author.skillsWanted.length > 0) {
+          skillWanted = author.skillsWanted.join(', ');
+        } else if (s.description && s.description.includes('[WANTS:')) {
+          const match = s.description.match(/\[WANTS:(.*?)\]/);
+          if (match) skillWanted = match[1].trim();
+        }
+      }
+
+      return {
+        ...s,
+        skillOffered: skillOffered || 'General Engineering',
+        skillWanted: skillWanted || s.skillWanted || 'Software Engineering'
+      };
+    });
   },
   async saveSkillOffers(skills) {
     localStorage.setItem(KEYS.SKILLS, JSON.stringify(skills));
     this.notifySync();
     if (isSupabaseConfigured && supabase && skills.length > 0) {
       try {
-        const latest = skills[0];
-        await supabase.from('skills').upsert({
-          id: latest.id,
-          user_id: latest.authorId,
-          user_name: latest.authorName,
-          user_avatar: latest.authorAvatar,
-          title: latest.skillOffered,
-          category: latest.category,
-          credits: latest.creditsRequired,
-          description: latest.description
+        const payload = skills.map(s => {
+          const cleanDesc = (s.description || 'Dedicated hands-on peer mentorship and collaborative learning session.').replace(/^\[WANTS:.*?\]\s*/, '');
+          return {
+            id: s.id,
+            user_id: s.authorId,
+            user_name: s.authorName,
+            user_avatar: s.authorAvatar,
+            title: s.skillOffered,
+            category: s.category || 'Core Computer Science',
+            credits: s.creditsRequired || 40,
+            description: `[WANTS:${s.skillWanted || 'Full-Stack Development'}] ${cleanDesc}`
+          };
         });
+        await supabase.from('skills').upsert(payload);
       } catch (e) {
         console.warn('Cloud skill save error:', e);
+      }
+    }
+  },
+
+  async deleteSkillOffer(skillId) {
+    const data = localStorage.getItem(KEYS.SKILLS);
+    const current = data ? JSON.parse(data) : [];
+    const updated = current.filter(s => s.id !== skillId);
+    localStorage.setItem(KEYS.SKILLS, JSON.stringify(updated));
+    this.notifySync();
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('skills').delete().eq('id', skillId);
+      } catch (e) {
+        console.warn('Cloud skill delete error:', e);
       }
     }
   },
@@ -266,19 +351,34 @@ export const storageService = {
     this.notifySync();
     if (isSupabaseConfigured && supabase && projects.length > 0) {
       try {
-        const latest = projects[0];
-        await supabase.from('projects').upsert({
-          id: latest.id,
-          user_id: latest.leadId || 'usr-lead',
-          owner: latest.leadName,
-          title: latest.title,
-          category: latest.category,
-          description: latest.description,
-          roles_needed: latest.rolesNeeded,
-          tags: latest.tags
-        });
+        const payload = projects.map(p => ({
+          id: p.id,
+          user_id: p.leadId || 'usr-lead',
+          owner: p.leadName,
+          title: p.title,
+          category: p.category || 'IoT & Full-Stack',
+          description: p.description || '',
+          roles_needed: p.rolesNeeded || [],
+          tags: p.tags || ['Engineering']
+        }));
+        await supabase.from('projects').upsert(payload);
       } catch (e) {
         console.warn('Cloud project save error:', e);
+      }
+    }
+  },
+
+  async deleteProject(projectId) {
+    const data = localStorage.getItem(KEYS.PROJECTS);
+    const current = data ? JSON.parse(data) : [];
+    const updated = current.filter(p => p.id !== projectId);
+    localStorage.setItem(KEYS.PROJECTS, JSON.stringify(updated));
+    this.notifySync();
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('projects').delete().eq('id', projectId);
+      } catch (e) {
+        console.warn('Cloud project delete error:', e);
       }
     }
   },
@@ -329,22 +429,38 @@ export const storageService = {
     }
   },
 
-  // --- DIRECT MESSAGES (SUPABASE CLOUD INTEGRATION) ---
+  // --- DIRECT & TEAM MESSAGES (SUPABASE CLOUD INTEGRATION) ---
   getMessages() {
     const data = localStorage.getItem(KEYS.MESSAGES);
-    return data ? JSON.parse(data) : [];
+    if (!data) return [];
+    try {
+      return JSON.parse(data) || [];
+    } catch (e) {
+      return [];
+    }
   },
   async saveMessages(messages) {
+    if (!Array.isArray(messages)) return;
     localStorage.setItem(KEYS.MESSAGES, JSON.stringify(messages));
     this.notifySync();
+
     if (isSupabaseConfigured && supabase && messages.length > 0) {
       try {
         const latest = messages[messages.length - 1];
+        if (!latest) return;
+
+        let contentPayload = latest.text || latest.content || '';
+        if (latest.teamRoomId) {
+          contentPayload = `[TEAM:${latest.teamRoomId}|PID:${latest.projectId || ''}|NAME:${encodeURIComponent(latest.senderName || '')}|ROLE:${encodeURIComponent(latest.senderRole || '')}|TIME:${encodeURIComponent(latest.timestamp || '')}] ${latest.text || latest.content || ''}`;
+        } else if (latest.receiverId) {
+          contentPayload = `[DM:TO:${latest.receiverId}|FROM:${latest.senderId}|NAME:${encodeURIComponent(latest.senderName || '')}|TIME:${encodeURIComponent(latest.timestamp || '')}] ${latest.text || latest.content || ''}`;
+        }
+
         await supabase.from('messages').upsert({
           id: latest.id || `msg-${Date.now()}`,
-          sender_id: latest.senderId,
-          receiver_id: latest.receiverId,
-          content: latest.text || latest.content || ''
+          sender_id: latest.senderId || 'usr-anon',
+          receiver_id: latest.receiverId || latest.senderId || 'usr-anon',
+          content: contentPayload
         });
       } catch (e) {
         console.warn('Cloud message save error:', e);
@@ -468,17 +584,58 @@ export const storageService = {
       const { data: cloudSkills, error: skillsErr } = await supabase.from('skills').select('*');
       if (!skillsErr && cloudSkills) {
         const cloudSkillsMap = {};
+        const localSkills = this.getSkillOffers();
+        const localSkillsMap = {};
+        localSkills.forEach(ls => { localSkillsMap[ls.id] = ls; });
+
         cloudSkills.forEach(s => {
+          const author = usersMap[s.user_id];
+          const localSkill = localSkillsMap[s.id];
+
+          // Determine best skillOffered
+          let skillOffered = s.title || localSkill?.skillOffered;
+          if (!skillOffered || skillOffered === 'Tech Assistance') {
+            if (author?.skillsOffered && author.skillsOffered.length > 0) {
+              skillOffered = author.skillsOffered.join(', ');
+            } else {
+              skillOffered = 'Computer Science & Engineering';
+            }
+          }
+
+          // Parse metadata from cloud description
+          let parsedWanted = null;
+          let cleanDesc = s.description || '';
+          if (s.description && s.description.includes('[WANTS:')) {
+            const match = s.description.match(/\[WANTS:(.*?)\]\s*(.*)$/s);
+            if (match) {
+              parsedWanted = match[1].trim();
+              cleanDesc = match[2].trim();
+            }
+          }
+
+          // Determine best skillWanted
+          let skillWanted = parsedWanted || s.skill_wanted || localSkill?.skillWanted;
+          if (!skillWanted || skillWanted === 'Tech Assistance' || skillWanted === 'Peer Skill Exchange') {
+            if (author?.skillsWanted && author.skillsWanted.length > 0) {
+              skillWanted = author.skillsWanted.join(', ');
+            } else if (localSkill?.skillWanted && localSkill.skillWanted !== 'Tech Assistance' && localSkill.skillWanted !== 'Peer Skill Exchange') {
+              skillWanted = localSkill.skillWanted;
+            } else {
+              skillWanted = skillWanted || 'Full-Stack Development';
+            }
+          }
+
           cloudSkillsMap[s.id] = {
             id: s.id,
             authorId: s.user_id,
-            authorName: s.user_name || (usersMap[s.user_id] ? usersMap[s.user_id].name : 'Member'),
-            authorAvatar: s.user_avatar || (usersMap[s.user_id] ? usersMap[s.user_id].avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.user_name || 'peer')}`),
-            skillOffered: s.title,
-            skillWanted: 'Tech Assistance',
-            category: s.category || 'Machine Learning',
-            description: s.description || '',
-            creditsRequired: s.credits || 40,
+            authorName: s.user_name || (author ? author.name : 'Member'),
+            authorAvatar: s.user_avatar || (author ? author.avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s.user_name || 'peer')}`),
+            authorYear: author?.year || localSkill?.authorYear || 'Campus Student',
+            skillOffered: skillOffered,
+            skillWanted: skillWanted,
+            category: s.category || localSkill?.category || 'Core Computer Science',
+            description: cleanDesc || localSkill?.description || `Dedicated hands-on peer mentorship session for ${skillOffered}.`,
+            creditsRequired: s.credits || localSkill?.creditsRequired || 40,
             rating: 5.0,
             status: 'Online'
           };
@@ -487,16 +644,19 @@ export const storageService = {
         // Push any locally created skills not yet in cloud
         const missingSkillsInCloud = localSkills.filter(ls => !cloudSkillsMap[ls.id]);
         if (missingSkillsInCloud.length > 0) {
-          const payload = missingSkillsInCloud.map(s => ({
-            id: s.id,
-            user_id: s.authorId,
-            user_name: s.authorName,
-            user_avatar: s.authorAvatar,
-            title: s.skillOffered,
-            category: s.category,
-            credits: s.creditsRequired,
-            description: s.description
-          }));
+          const payload = missingSkillsInCloud.map(s => {
+            const cleanDesc = (s.description || 'Dedicated hands-on peer mentorship and collaborative learning session.').replace(/^\[WANTS:.*?\]\s*/, '');
+            return {
+              id: s.id,
+              user_id: s.authorId,
+              user_name: s.authorName,
+              user_avatar: s.authorAvatar,
+              title: s.skillOffered,
+              category: s.category || 'Core Computer Science',
+              credits: s.creditsRequired || 40,
+              description: `[WANTS:${s.skillWanted || 'Full-Stack Development'}] ${cleanDesc}`
+            };
+          });
           await supabase.from('skills').upsert(payload);
           missingSkillsInCloud.forEach(s => { cloudSkillsMap[s.id] = s; });
         }
@@ -521,7 +681,7 @@ export const storageService = {
             rolesNeeded: p.roles_needed || [],
             tags: p.tags || ['React', 'Node.js'],
             deadline: 'Capstone Target',
-            teamSize: '1 / 3 Members'
+            teamSize: `${1 + (p.roles_needed ? p.roles_needed.filter(r => r.status === 'Filled').length : 0)} / ${(p.roles_needed ? p.roles_needed.length : 0) + 1} Member${((p.roles_needed ? p.roles_needed.length : 0) + 1) > 1 ? 's' : ''}`
           };
         });
 
@@ -564,14 +724,77 @@ export const storageService = {
       // 5. Sync Messages
       const { data: cloudMessages, error: msgErr } = await supabase.from('messages').select('*');
       if (!msgErr && cloudMessages) {
-        const formattedMessages = cloudMessages.map(m => ({
-          id: m.id,
-          senderId: m.sender_id,
-          receiverId: m.receiver_id,
-          text: m.content,
-          timestamp: m.timestamp || new Date().toISOString()
-        }));
-        localStorage.setItem(KEYS.MESSAGES, JSON.stringify(formattedMessages));
+        const localMessages = this.getMessages();
+        const localMessagesMap = {};
+        localMessages.forEach(lm => { localMessagesMap[lm.id] = lm; });
+
+        const formattedMessages = cloudMessages.map(m => {
+          const localMsg = localMessagesMap[m.id];
+          let teamRoomId = localMsg?.teamRoomId;
+          let projectId = localMsg?.projectId;
+          let receiverId = m.receiver_id === m.sender_id ? null : m.receiver_id;
+          let senderName = localMsg?.senderName || (usersMap[m.sender_id] ? usersMap[m.sender_id].name : 'Peer Member');
+          let senderRole = localMsg?.senderRole || 'Team Member';
+          let timestamp = localMsg?.timestamp || m.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          let text = m.content || '';
+
+          // Parse [TEAM:...] format
+          if (text.startsWith('[TEAM:')) {
+            const teamMatch = text.match(/^\[TEAM:(.*?)\]\s*(.*)$/s);
+            if (teamMatch) {
+              const metaPart = teamMatch[1];
+              text = teamMatch[2].trim();
+
+              if (metaPart.includes('|')) {
+                const parts = metaPart.split('|');
+                teamRoomId = parts[0];
+                parts.slice(1).forEach(p => {
+                  if (p.startsWith('PID:')) projectId = p.replace('PID:', '');
+                  if (p.startsWith('NAME:')) senderName = decodeURIComponent(p.replace('NAME:', ''));
+                  if (p.startsWith('ROLE:')) senderRole = decodeURIComponent(p.replace('ROLE:', ''));
+                  if (p.startsWith('TIME:')) timestamp = decodeURIComponent(p.replace('TIME:', ''));
+                });
+              } else {
+                teamRoomId = metaPart.trim();
+              }
+            }
+          }
+          // Parse [DM:...] format
+          else if (text.startsWith('[DM:')) {
+            const dmMatch = text.match(/^\[DM:(.*?)\]\s*(.*)$/s);
+            if (dmMatch) {
+              const metaPart = dmMatch[1];
+              text = dmMatch[2].trim();
+
+              metaPart.split('|').forEach(p => {
+                if (p.startsWith('TO:')) receiverId = p.replace('TO:', '');
+                if (p.startsWith('NAME:')) senderName = decodeURIComponent(p.replace('NAME:', ''));
+                if (p.startsWith('TIME:')) timestamp = decodeURIComponent(p.replace('TIME:', ''));
+              });
+            }
+          }
+
+          return {
+            id: m.id,
+            senderId: m.sender_id,
+            senderName: senderName,
+            senderAvatar: localMsg?.senderAvatar || (usersMap[m.sender_id] ? usersMap[m.sender_id].avatar : ''),
+            senderRole: senderRole,
+            receiverId: receiverId || localMsg?.receiverId,
+            teamRoomId: teamRoomId || localMsg?.teamRoomId,
+            projectId: projectId || localMsg?.projectId,
+            projectTitle: localMsg?.projectTitle,
+            text: text,
+            timestamp: timestamp
+          };
+        });
+
+        // Retain any team messages or local messages not yet returned by cloud
+        const cloudIds = new Set(cloudMessages.map(cm => cm.id));
+        const missingInCloud = localMessages.filter(lm => !cloudIds.has(lm.id));
+        const combinedMessages = [...formattedMessages, ...missingInCloud];
+
+        localStorage.setItem(KEYS.MESSAGES, JSON.stringify(combinedMessages));
       }
 
       this.notifySync();

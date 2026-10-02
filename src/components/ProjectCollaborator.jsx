@@ -4,34 +4,45 @@ import {
   PlusCircle, 
   Sparkles, 
   UserPlus, 
-  Briefcase,
-  MessageSquare,
-  UserCheck,
-  UserX,
-  FolderPlus
+  Briefcase, 
+  MessageSquare, 
+  UserCheck, 
+  UserX, 
+  FolderPlus,
+  Trash2,
+  Crown,
+  Layers,
+  ArrowRight,
+  User
 } from 'lucide-react';
 import { calculateProjectCompatibility } from '../utils/matchingAlgorithm';
+import ProjectTeamRoomModal from './ProjectTeamRoomModal';
 
 export default function ProjectCollaborator({ 
   projects, 
   currentUser, 
   onApplyToRole, 
   onAddNewProject, 
+  onDeleteProject,
   onOpenChat,
   onAcceptApplicant,
-  onRejectApplicant
+  onRejectApplicant,
+  onSendMessage,
+  messages = []
 }) {
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [activeTabFilter, setActiveTabFilter] = useState('All');
+  const [activeTeamRoomProject, setActiveTeamRoomProject] = useState(null);
 
   // Form state for new project
   const [newProject, setNewProject] = useState({
     title: '',
     category: 'IoT & Full-Stack',
-    deadline: 'Major Capstone Project',
+    deadline: 'Major Capstone Target',
+    targetTeamSize: 3,
     description: '',
-    roles: 'React Developer, ML Engineer',
-    tags: 'React, Node.js, AI'
+    roles: '',
+    tags: ''
   });
 
   const categories = ['All', 'IoT & Full-Stack', 'Deep Learning & HealthTech', 'Developer Tools & WebSockets'];
@@ -42,26 +53,35 @@ export default function ProjectCollaborator({
     e.preventDefault();
     if (!newProject.title || !newProject.description) return;
 
-    const parsedRoles = newProject.roles.split(',').map(r => ({
-      role: r.trim(),
-      status: 'Open',
-      skills: [r.trim()]
-    }));
+    const parsedRoles = newProject.roles
+      ? newProject.roles.split(',').map(r => r.trim()).filter(Boolean).map(r => ({
+          role: r,
+          status: 'Open',
+          skills: [r]
+        }))
+      : [];
 
-    const parsedTags = newProject.tags.split(',').map(t => t.trim());
+    const parsedTags = newProject.tags
+      ? newProject.tags.split(',').map(t => t.trim()).filter(Boolean)
+      : ['Engineering'];
+
+    const totalCapacity = Number(newProject.targetTeamSize) || Math.max(2, parsedRoles.length + 1);
 
     onAddNewProject({
       id: `proj-${Date.now()}`,
       title: newProject.title,
-      category: newProject.category,
+      category: newProject.category || 'IoT & Full-Stack',
+      leadId: currentUser.id,
       leadName: `${currentUser.name} (You)`,
       leadAvatar: currentUser.avatar,
-      deadline: newProject.deadline,
+      deadline: newProject.deadline || 'Major Capstone Target',
+      targetTeamSize: totalCapacity,
       description: newProject.description,
       rolesNeeded: parsedRoles,
       applicants: [],
+      members: [],
       tags: parsedTags,
-      teamSize: `1 / ${parsedRoles.length + 1} Members`,
+      teamSize: `1 / ${totalCapacity} Members`,
       matchScore: 98
     });
 
@@ -69,10 +89,11 @@ export default function ProjectCollaborator({
     setNewProject({
       title: '',
       category: 'IoT & Full-Stack',
-      deadline: 'Major Capstone Project',
+      deadline: 'Major Capstone Target',
+      targetTeamSize: 3,
       description: '',
-      roles: 'React Developer, ML Engineer',
-      tags: 'React, Node.js, AI'
+      roles: '',
+      tags: ''
     });
   };
 
@@ -88,7 +109,7 @@ export default function ProjectCollaborator({
           </span>
           <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">Recruit Teammates & Build Capstones</h1>
           <p className="text-xs md:text-sm text-slate-300 max-w-xl leading-relaxed">
-            Post project vacancies or apply for specialized engineering roles. Automatic compatibility scoring calculates tech stack overlap!
+            Post project vacancies with custom team sizes, collaborate in dedicated Project Team Rooms, and message teammates 1-on-1 for task coordination.
           </p>
         </div>
 
@@ -140,17 +161,38 @@ export default function ProjectCollaborator({
         <div className="grid grid-cols-1 gap-6">
           {filteredProjects.map((project) => {
             const matchResult = calculateProjectCompatibility(currentUser, project);
-            const isLead = project.leadName.includes("You") || project.leadName.includes(currentUser.name);
+            const isLead = (project.leadId && currentUser?.id && project.leadId === currentUser.id) ||
+              (project.leadName && project.leadName.toLowerCase().includes("you")) ||
+              (project.leadName && currentUser?.name && project.leadName.toLowerCase().includes(currentUser.name.toLowerCase()));
             
+            // Collect accepted teammates
+            const acceptedTeammates = [
+              ...(project.rolesNeeded || [])
+                .filter(r => r.status === 'Filled')
+                .map((r, i) => ({
+                  id: r.studentId || `mem-${i}`,
+                  name: r.filledBy || 'Accepted Teammate',
+                  role: r.role,
+                  avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(r.filledBy || 'member')}`
+                })),
+              ...(project.members || [])
+            ].filter((v, i, a) => a.findIndex(t => t.name === v.name) === i);
+
+            const isMember = isLead || acceptedTeammates.some(m => m.id === currentUser.id || m.name.toLowerCase() === currentUser.name.toLowerCase());
+            
+            const totalCapacity = project.targetTeamSize || ((project.rolesNeeded?.length || 0) + 1);
+            const currentMembersCount = 1 + acceptedTeammates.length;
+
             return (
               <div
                 key={project.id}
-                className="bg-slate-900/90 border border-slate-800/90 hover:border-purple-500/40 rounded-3xl p-6 shadow-xl backdrop-blur-md transition space-y-4"
+                className="bg-slate-900/90 border border-slate-800/90 hover:border-purple-500/40 rounded-3xl p-6 shadow-xl backdrop-blur-md transition space-y-4 relative"
               >
+                {/* Top Lead & Actions Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
                   <div className="flex items-center gap-3">
                     <img
-                      src={project.leadAvatar}
+                      src={project.leadAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(project.leadName)}`}
                       alt={project.leadName}
                       className="h-12 w-12 rounded-2xl border border-purple-500/30 object-cover"
                     />
@@ -167,24 +209,50 @@ export default function ProjectCollaborator({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Enter Team Room (Visible to everyone, especially teammates & lead) */}
+                    <button
+                      onClick={() => setActiveTeamRoomProject(project)}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-bold text-white shadow-md transition"
+                      title="Open shared project workspace & team chat"
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      <span>Team Room</span>
+                    </button>
+
+                    {/* Chat Lead if not lead */}
                     {!isLead && (
                       <button
-                        onClick={() => onOpenChat({ name: project.leadName, avatar: project.leadAvatar, year: 'Project Lead' })}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-xs font-semibold text-purple-300 border border-slate-800"
+                        onClick={() => onOpenChat({ id: project.leadId, name: project.leadName.replace(/\s*\(You\)/, ''), avatar: project.leadAvatar, year: 'Project Lead' })}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-xs font-semibold text-purple-300 border border-slate-800 transition"
                       >
                         <MessageSquare className="h-3.5 w-3.5 text-purple-400" />
                         Chat Lead
                       </button>
                     )}
 
-                    <div className="flex items-center gap-3 bg-purple-950/60 border border-purple-500/30 px-4 py-2 rounded-2xl">
+                    {/* Teammate Match Score Badge */}
+                    <div className="flex items-center gap-2 bg-purple-950/60 border border-purple-500/30 px-3 py-1.5 rounded-xl">
                       <div className="text-right">
-                        <div className="text-[10px] uppercase font-bold text-purple-300">Teammate Match</div>
-                        <div className="text-lg font-black text-purple-400">{matchResult.finalScore}%</div>
+                        <div className="text-[9px] uppercase font-bold text-purple-300">Match</div>
+                        <div className="text-sm font-black text-purple-400">{matchResult.finalScore}%</div>
                       </div>
-                      <Sparkles className="h-5 w-5 text-purple-400 animate-pulse" />
+                      <Sparkles className="h-4 w-4 text-purple-400 animate-pulse" />
                     </div>
+
+                    {/* Delete Project Button (Only for Lead) */}
+                    {isLead && onDeleteProject && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteProject(project.id);
+                        }}
+                        className="p-2 bg-red-950/40 hover:bg-red-900/60 text-red-300 rounded-xl border border-red-500/30 transition hover:scale-105"
+                        title="Delete Project Listing"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -202,6 +270,63 @@ export default function ProjectCollaborator({
                   ))}
                 </div>
 
+                {/* Team Roster / Accepted Members Section with 1-on-1 DM */}
+                {acceptedTeammates.length > 0 && (
+                  <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <Users className="h-3.5 w-3.5 text-cyan-400" />
+                        Active Project Teammates ({acceptedTeammates.length})
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        Click 1-on-1 Chat to coordinate tasks with any member
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                      {acceptedTeammates.map((teammate, idx) => {
+                        const isMe = teammate.id === currentUser.id || teammate.name.toLowerCase() === currentUser.name.toLowerCase();
+
+                        return (
+                          <div
+                            key={idx}
+                            className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <img
+                                src={teammate.avatar}
+                                alt={teammate.name}
+                                className="h-7 w-7 rounded-full border border-purple-500/30 object-cover shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-slate-100 truncate">
+                                  {teammate.name} {isMe && <span className="text-[9px] text-purple-300 font-semibold">(You)</span>}
+                                </div>
+                                <div className="text-[10px] text-purple-300 truncate">{teammate.role}</div>
+                              </div>
+                            </div>
+
+                            {!isMe && (
+                              <button
+                                onClick={() => onOpenChat({
+                                  id: teammate.id,
+                                  name: teammate.name,
+                                  avatar: teammate.avatar,
+                                  year: `Teammate on ${project.title}`
+                                })}
+                                className="p-1.5 bg-slate-950 hover:bg-slate-800 text-cyan-300 rounded-lg border border-slate-800 transition shrink-0"
+                                title={`Chat 1-on-1 with ${teammate.name}`}
+                              >
+                                <MessageSquare className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Roles Needed Section */}
                 <div className="bg-slate-950/90 p-4 rounded-2xl border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
@@ -209,7 +334,9 @@ export default function ProjectCollaborator({
                       <Briefcase className="h-4 w-4 text-purple-400" />
                       Open Roles & Required Skill Sets
                     </span>
-                    <span>{project.teamSize}</span>
+                    <span className="font-mono text-[11px] bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 text-purple-300 font-bold">
+                      {currentMembersCount} / {totalCapacity} Members Joined
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -228,7 +355,7 @@ export default function ProjectCollaborator({
                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
                               roleObj.status === 'Filled' ? 'bg-slate-800 text-slate-500' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                             }`}>
-                              {roleObj.status}
+                              {roleObj.status === 'Filled' ? `Filled by ${roleObj.filledBy || 'Peer'}` : roleObj.status}
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-400">
@@ -287,7 +414,7 @@ export default function ProjectCollaborator({
                             </button>
 
                             <button
-                              onClick={() => onOpenChat({ name: app.studentName, year: 'Applicant Student' })}
+                              onClick={() => onOpenChat({ id: app.studentId, name: app.studentName, year: 'Applicant Student' })}
                               className="p-1.5 bg-slate-900 text-purple-300 hover:bg-slate-800 rounded-lg border border-slate-800"
                               title="Chat Applicant"
                             >
@@ -328,7 +455,7 @@ export default function ProjectCollaborator({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Category</label>
                   <input
@@ -339,11 +466,27 @@ export default function ProjectCollaborator({
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-purple-500"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Target Team Size</label>
+                  <input
+                    type="number"
+                    min="2"
+                    max="10"
+                    required
+                    value={newProject.targetTeamSize}
+                    onChange={(e) => setNewProject({ ...newProject, targetTeamSize: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-purple-500"
+                    title="Total members required (including you as Lead)"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">Includes you + peers</span>
+                </div>
+
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Deadline / Target</label>
                   <input
                     type="text"
-                    placeholder="e.g. Major Project (Sem 8)"
+                    placeholder="e.g. Sem 8 Capstone"
                     value={newProject.deadline}
                     onChange={(e) => setNewProject({ ...newProject, deadline: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-purple-500"
@@ -367,9 +510,20 @@ export default function ProjectCollaborator({
                 <label className="block text-slate-300 font-semibold mb-1">Open Roles Needed (comma separated)</label>
                 <input
                   type="text"
-                  placeholder="e.g. React Frontend Developer, PyTorch Researcher, Backend Dev"
+                  placeholder="e.g. AI Engineer, React Frontend Developer, Backend Dev"
                   value={newProject.roles}
                   onChange={(e) => setNewProject({ ...newProject, roles: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Tech Stack Tags (comma separated)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. React, Python, PyTorch, Node.js"
+                  value={newProject.tags}
+                  onChange={(e) => setNewProject({ ...newProject, tags: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:border-purple-500"
                 />
               </div>
@@ -393,6 +547,17 @@ export default function ProjectCollaborator({
           </form>
         </div>
       )}
+
+      {/* Project Team Room Workspace Modal */}
+      <ProjectTeamRoomModal
+        isOpen={!!activeTeamRoomProject}
+        onClose={() => setActiveTeamRoomProject(null)}
+        project={activeTeamRoomProject}
+        currentUser={currentUser}
+        onOpenDirectChat={(recipient) => onOpenChat(recipient)}
+        onSendMessage={onSendMessage}
+        allMessages={messages}
+      />
 
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   MessageSquare, 
   Send, 
@@ -6,45 +6,91 @@ import {
   User, 
   Video, 
   CheckCheck, 
-  Sparkles
+  Sparkles,
+  Smile
 } from 'lucide-react';
+import { storageService } from '../services/storageService';
+import GboardEmojiPicker from './GboardEmojiPicker';
 
 export default function DirectChatDrawer({ 
   isOpen, 
   onClose, 
   currentUser, 
   recipient, 
-  allMessages, 
+  allMessages = [], 
   onSendMessage 
 }) {
   const [inputMsg, setInputMsg] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [localMessages, setLocalMessages] = useState(() => storageService.getMessages());
+  const emojiPickerRef = useRef(null);
+
+  useEffect(() => {
+    const unsub = storageService.subscribeSync(() => {
+      setLocalMessages(storageService.getMessages());
+    });
+    return unsub;
+  }, []);
+
+  // Close emoji picker on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEmojiPicker]);
+
+  const recipientId = recipient ? (recipient.id || recipient.authorId) : null;
+  const recipientName = recipient ? (recipient.name || recipient.authorName) : '';
+  const recipientAvatar = recipient ? (recipient.avatar || recipient.authorAvatar) : '';
+
+  const effectiveMessages = useMemo(() => {
+    const msgMap = new Map();
+    const safeAll = Array.isArray(allMessages) ? allMessages : [];
+    const safeLocal = Array.isArray(localMessages) ? localMessages : [];
+    [...safeAll, ...safeLocal].forEach(m => {
+      if (m && m.id) msgMap.set(m.id, m);
+    });
+    return Array.from(msgMap.values());
+  }, [allMessages, localMessages]);
+
+  const myId = currentUser?.id;
+
+  // Filter conversation messages between currentUser and recipient
+  const activeConversation = (isOpen && recipient && myId) ? effectiveMessages.filter(m => 
+    (m.senderId === myId && m.receiverId === recipientId) ||
+    (m.senderId === recipientId && m.receiverId === myId)
+  ) : [];
 
   if (!isOpen || !recipient) return null;
 
-  const recipientId = recipient.id || recipient.authorId;
-  const recipientName = recipient.name || recipient.authorName;
-  const recipientAvatar = recipient.avatar || recipient.authorAvatar;
-
-  // Filter conversation messages between currentUser and recipient
-  const activeConversation = allMessages.filter(m => 
-    (m.senderId === currentUser.id && m.receiverId === recipientId) ||
-    (m.senderId === recipientId && m.receiverId === currentUser.id)
-  );
+  const handleAddEmoji = (emoji) => {
+    setInputMsg(prev => prev + emoji);
+  };
 
   const handleSend = (e) => {
-    e.preventDefault();
-    if (!inputMsg.trim()) return;
+    if (e && e.preventDefault) e.preventDefault();
+    const cleanText = inputMsg.trim();
+    if (!cleanText || !currentUser) return;
 
     onSendMessage({
-      id: `msg-${Date.now()}`,
+      id: `msg-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
       senderId: currentUser.id,
       receiverId: recipientId,
       senderName: currentUser.name,
-      text: inputMsg,
+      text: cleanText,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     });
 
     setInputMsg('');
+    setShowEmojiPicker(false);
   };
 
   return (
@@ -85,7 +131,10 @@ export default function DirectChatDrawer({
           </div>
         ) : (
           activeConversation.map((m) => {
-            const isMe = m.senderId === currentUser.id;
+            const isMe = currentUser && (
+              m.senderId === currentUser.id || 
+              (m.senderName && currentUser.name && m.senderName.toLowerCase() === currentUser.name.toLowerCase())
+            );
             return (
               <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                 <div className={`p-3 rounded-2xl max-w-[85%] ${
@@ -104,18 +153,78 @@ export default function DirectChatDrawer({
         )}
       </div>
 
-      {/* Input */}
-      <form onSubmit={handleSend} className="p-3 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
-        <input
-          type="text"
-          placeholder={`Type a message to ${recipientName}...`}
-          value={inputMsg}
-          onChange={(e) => setInputMsg(e.target.value)}
-          className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
-        />
-        <button type="submit" className="p-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-md">
-          <Send className="h-4 w-4" />
-        </button>
+      {/* Input Form with Emoji Picker */}
+      <form onSubmit={handleSend} className="p-3 bg-slate-950 border-t border-slate-800 space-y-2 relative">
+        
+        {/* Google Keyboard Emoji Picker Popover */}
+        {showEmojiPicker && (
+          <div 
+            ref={emojiPickerRef}
+            className="absolute bottom-full mb-2 right-2 sm:right-4 z-40"
+          >
+            <GboardEmojiPicker
+              onSelectEmoji={(emoji) => handleAddEmoji(emoji)}
+              onClose={() => setShowEmojiPicker(false)}
+              themeColor="indigo"
+            />
+          </div>
+        )}
+
+        {/* Quick Emoji Reaction Strip */}
+        <div className="flex items-center justify-between px-1 text-[10px]">
+          <span className="text-slate-500 font-semibold">Quick Reaction:</span>
+          <div className="flex items-center gap-1.5 bg-slate-900/80 px-2 py-0.5 rounded-xl border border-slate-800">
+            {['👍', '🔥', '🚀', '👏', '💡', '❤️', '✅', '🎉'].map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => handleAddEmoji(emoji)}
+                className="hover:scale-125 transition-transform px-0.5 cursor-pointer"
+                title={`Insert ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Input bar */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className={`p-2.5 rounded-xl border transition ${
+              showEmojiPicker 
+                ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300' 
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+            }`}
+            title="Google Keyboard Emojis"
+          >
+            <Smile className="h-4 w-4" />
+          </button>
+
+          <input
+            type="text"
+            placeholder={`Type a message to ${recipientName}...`}
+            value={inputMsg}
+            onChange={(e) => setInputMsg(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend(e);
+              }
+            }}
+            className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+          />
+
+          <button 
+            type="submit" 
+            disabled={!inputMsg.trim()}
+            className="p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl shadow-md transition"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </div>
       </form>
 
     </div>

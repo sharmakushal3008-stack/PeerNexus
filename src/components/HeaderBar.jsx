@@ -8,7 +8,17 @@ import {
   LogOut
 } from 'lucide-react';
 
-export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpenAIAdvisor, onLogout, notifications = [], onNotificationClick }) {
+export default function HeaderBar({ 
+  activeTab, 
+  setActiveTab, 
+  currentUser, 
+  onOpenAIAdvisor, 
+  onLogout, 
+  notifications = [], 
+  onNotificationClick,
+  onClearNotification,
+  onClearAllNotifications
+}) {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -75,9 +85,22 @@ export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpen
               <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 space-y-3 z-50 animate-fade-in">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                   <span className="text-xs font-bold text-white">Campus Inbox Notifications</span>
-                  <span className="text-[10px] text-cyan-400 font-mono font-bold bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800/80">
-                    {notifications.length} Active
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-cyan-400 font-mono font-bold bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800/80">
+                      {notifications.length} Active
+                    </span>
+                    {notifications.length > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onClearAllNotifications) onClearAllNotifications();
+                        }}
+                        className="text-[10px] text-slate-400 hover:text-cyan-300 transition hover:underline"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
@@ -91,11 +114,23 @@ export default function HeaderBar({ activeTab, setActiveTab, currentUser, onOpen
                           if (onNotificationClick) onNotificationClick(n);
                           setIsNotifOpen(false);
                         }}
-                        className="bg-slate-950 hover:bg-slate-950/80 p-3 rounded-xl border border-slate-800 text-xs space-y-1 cursor-pointer transition group"
+                        className="bg-slate-950 hover:bg-slate-950/80 p-3 rounded-xl border border-slate-800 text-xs space-y-1 cursor-pointer transition group relative"
                       >
                         <div className="flex items-center justify-between">
                           <div className="font-bold text-slate-100 group-hover:text-cyan-400 transition">{n.title}</div>
-                          <span className="text-[9px] text-slate-500 font-mono">{n.timestamp}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] text-slate-500 font-mono">{n.timestamp}</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onClearNotification) onClearNotification(n.id);
+                              }}
+                              className="text-slate-500 hover:text-red-400 p-0.5 rounded hover:bg-slate-900 transition"
+                              title="Dismiss notification"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                         <div className="text-[11px] text-slate-400 leading-normal">{n.desc}</div>
                         <div className="text-[10px] text-cyan-400 font-semibold pt-1 flex items-center gap-1">

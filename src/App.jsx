@@ -213,13 +213,14 @@ export default function App() {
         return {
           ...u,
           credits: u.credits + 50,
-          skillsOffered: Array.from(new Set([...u.skillsOffered, newOffer.skillOffered]))
+          skillsOffered: Array.from(new Set([...(u.skillsOffered || []), newOffer.skillOffered])),
+          skillsWanted: Array.from(new Set([...(u.skillsWanted || []), newOffer.skillWanted]))
         };
       }
       return u;
     });
     setUsers(updatedUsers);
-    storageService.saveUsers(updatedUsers);
+    await storageService.saveUsers(updatedUsers);
 
     showToast(`Skill offer "${newOffer.skillOffered}" published! Earned +50 Credits! 🎉`);
   };
@@ -228,7 +229,7 @@ export default function App() {
   const handleDeleteSkillOffer = async (skillId) => {
     const updatedSkills = skillOffers.filter(s => s.id !== skillId);
     setSkillOffers(updatedSkills);
-    await storageService.saveSkillOffers(updatedSkills);
+    await storageService.deleteSkillOffer(skillId);
     showToast(`Skill listing removed from campus marketplace.`);
   };
 
@@ -297,9 +298,19 @@ export default function App() {
     showToast(`Project "${newProj.title}" published!`);
   };
 
-  // Send Direct Message (Pushed to Supabase Cloud)
+  // Delete / Withdraw Project (Pushed to Supabase Cloud)
+  const handleDeleteProject = async (projectId) => {
+    const updatedProjects = projects.filter(p => p.id !== projectId);
+    setProjects(updatedProjects);
+    await storageService.deleteProject(projectId);
+    showToast(`Project listing removed.`);
+  };
+
+  // Send Direct Message or Team Broadcast (Pushed to Supabase Cloud)
   const handleSendMessage = async (msgObj) => {
-    const updatedMessages = [...messages, msgObj];
+    if (!msgObj) return;
+    const currentMsgs = storageService.getMessages();
+    const updatedMessages = [...currentMsgs.filter(m => m.id !== msgObj.id), msgObj];
     setMessages(updatedMessages);
     await storageService.saveMessages(updatedMessages);
   };
@@ -316,29 +327,44 @@ export default function App() {
     showToast(`Cleared database!`);
   };
 
-  // UNAUTHENTICATED VISITOR VIEW: LANDING PAGE OR AUTH MODAL
-  if (!currentUser) {
-    if (showAuth) {
-      return (
-        <AuthView
-          onLoginSuccess={handleLoginSuccess}
-          onRegisterSuccess={handleRegisterSuccess}
-          onBackToLanding={() => setShowAuth(false)}
-        />
-      );
+  // Dismissed / Read notification IDs per user
+  const [dismissedNotifIds, setDismissedNotifIds] = useState(() => {
+    try {
+      const activeId = storageService.getActiveUserId();
+      const saved = localStorage.getItem(`cf_dismissed_notifs_${activeId || 'guest'}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
+  });
 
-    return (
-      <LandingPage
-        onGetStarted={() => setShowAuth(true)}
-        onOpenLogin={() => setShowAuth(true)}
-      />
-    );
-  }
+  // Whenever currentUser changes, load their dismissed notification IDs
+  useEffect(() => {
+    if (currentUser?.id) {
+      try {
+        const saved = localStorage.getItem(`cf_dismissed_notifs_${currentUser.id}`);
+        setDismissedNotifIds(saved ? JSON.parse(saved) : []);
+      } catch {
+        setDismissedNotifIds([]);
+      }
+    }
+  }, [currentUser?.id]);
 
-  // AUTHENTICATED USER DASHBOARD
+  const handleDismissNotification = (notifId) => {
+    if (!currentUser) return;
+    setDismissedNotifIds(prev => {
+      const updated = Array.from(new Set([...prev, notifId]));
+      try {
+        localStorage.setItem(`cf_dismissed_notifs_${currentUser.id}`, JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Could not persist dismissed notification', e);
+      }
+      return updated;
+    });
+  };
+
   // Compute Real-Time Notifications list for currentUser
-  const userNotifications = currentUser ? [
+  const rawUserNotifications = currentUser ? [
     // 1. Incoming Pending Escrow Requests
     ...tradeRequests
       .filter(t => t.receiverId === currentUser.id && t.status === 'Pending Escrow')
@@ -389,7 +415,27 @@ export default function App() {
       }))
   ] : [];
 
+  const userNotifications = rawUserNotifications.filter(n => !dismissedNotifIds.includes(n.id));
+
+  const handleClearAllNotifications = () => {
+    if (!currentUser || rawUserNotifications.length === 0) return;
+    const allIds = rawUserNotifications.map(n => n.id);
+    setDismissedNotifIds(prev => {
+      const updated = Array.from(new Set([...prev, ...allIds]));
+      try {
+        localStorage.setItem(`cf_dismissed_notifs_${currentUser.id}`, JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Could not persist dismissed notifications', e);
+      }
+      return updated;
+    });
+    showToast('All notifications cleared');
+  };
+
   const handleNotificationClick = (notif) => {
+    // Automatically clear notification when opened/clicked
+    handleDismissNotification(notif.id);
+
     if (notif.trade) {
       if (notif.trade.status === 'Accepted') {
         setActiveSessionTrade(notif.trade);
@@ -401,6 +447,26 @@ export default function App() {
       if (sender) setChatRecipient(sender);
     }
   };
+
+  // UNAUTHENTICATED VISITOR VIEW: LANDING PAGE OR AUTH MODAL
+  if (!currentUser) {
+    if (showAuth) {
+      return (
+        <AuthView
+          onLoginSuccess={handleLoginSuccess}
+          onRegisterSuccess={handleRegisterSuccess}
+          onBackToLanding={() => setShowAuth(false)}
+        />
+      );
+    }
+
+    return (
+      <LandingPage
+        onGetStarted={() => setShowAuth(true)}
+        onOpenLogin={() => setShowAuth(true)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 flex text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950">
@@ -426,6 +492,8 @@ export default function App() {
           onLogout={handleLogout}
           notifications={userNotifications}
           onNotificationClick={handleNotificationClick}
+          onClearNotification={handleDismissNotification}
+          onClearAllNotifications={handleClearAllNotifications}
         />
 
         {/* View Content */}
@@ -448,9 +516,12 @@ export default function App() {
               currentUser={currentUser}
               onApplyToRole={handleApplyToRole}
               onAddNewProject={handleAddNewProject}
+              onDeleteProject={handleDeleteProject}
               onOpenChat={(recipient) => setChatRecipient(recipient)}
               onAcceptApplicant={handleAcceptApplicant}
               onRejectApplicant={handleRejectApplicant}
+              onSendMessage={handleSendMessage}
+              messages={messages}
             />
           )}
 
