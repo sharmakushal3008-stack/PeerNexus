@@ -72,7 +72,7 @@ export default function ProjectCollaborator({
       title: newProject.title,
       category: newProject.category || 'IoT & Full-Stack',
       leadId: currentUser.id,
-      leadName: `${currentUser.name} (You)`,
+      leadName: currentUser.name,
       leadAvatar: currentUser.avatar,
       deadline: newProject.deadline || 'Major Capstone Target',
       targetTeamSize: totalCapacity,
@@ -161,9 +161,13 @@ export default function ProjectCollaborator({
         <div className="grid grid-cols-1 gap-6">
           {filteredProjects.map((project) => {
             const matchResult = calculateProjectCompatibility(currentUser, project);
-            const isLead = (project.leadId && currentUser?.id && project.leadId === currentUser.id) ||
-              (project.leadName && project.leadName.toLowerCase().includes("you")) ||
-              (project.leadName && currentUser?.name && project.leadName.toLowerCase().includes(currentUser.name.toLowerCase()));
+            const cleanLeadName = (project.leadName || 'Project Lead').replace(/\s*\(You\)/gi, '').trim();
+            const isLead = Boolean(
+              currentUser && (
+                (project.leadId && project.leadId === currentUser.id) ||
+                (cleanLeadName && currentUser.name && cleanLeadName.toLowerCase() === currentUser.name.toLowerCase())
+              )
+            );
             
             // Collect accepted teammates
             const acceptedTeammates = [
@@ -171,14 +175,17 @@ export default function ProjectCollaborator({
                 .filter(r => r.status === 'Filled')
                 .map((r, i) => ({
                   id: r.studentId || `mem-${i}`,
-                  name: r.filledBy || 'Accepted Teammate',
+                  name: (r.filledBy || 'Accepted Teammate').replace(/\s*\(You\)/gi, '').trim(),
                   role: r.role,
                   avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(r.filledBy || 'member')}`
                 })),
               ...(project.members || [])
             ].filter((v, i, a) => a.findIndex(t => t.name === v.name) === i);
 
-            const isMember = isLead || acceptedTeammates.some(m => m.id === currentUser.id || m.name.toLowerCase() === currentUser.name.toLowerCase());
+            const isMember = isLead || acceptedTeammates.some(m => 
+              (m.id && currentUser && m.id === currentUser.id) || 
+              (m.name && currentUser?.name && m.name.toLowerCase() === currentUser.name.toLowerCase())
+            );
             
             const totalCapacity = project.targetTeamSize || ((project.rolesNeeded?.length || 0) + 1);
             const currentMembersCount = 1 + acceptedTeammates.length;
@@ -192,8 +199,8 @@ export default function ProjectCollaborator({
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
                   <div className="flex items-center gap-3">
                     <img
-                      src={project.leadAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(project.leadName)}`}
-                      alt={project.leadName}
+                      src={project.leadAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(cleanLeadName)}`}
+                      alt={cleanLeadName}
                       className="h-12 w-12 rounded-2xl border border-purple-500/30 object-cover"
                     />
                     <div>
@@ -204,13 +211,13 @@ export default function ProjectCollaborator({
                         </span>
                       </div>
                       <p className="text-xs text-slate-400">
-                        Led by <strong className="text-slate-200">{project.leadName}</strong> • Target: {project.deadline}
+                        Led by <strong className="text-slate-200">{cleanLeadName}{isLead ? ' (You)' : ''}</strong> • Target: {project.deadline}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
-                    {/* Enter Team Room (Visible to everyone, especially teammates & lead) */}
+                    {/* Enter Team Room (Visible to teammates, lead, and applicants) */}
                     <button
                       onClick={() => setActiveTeamRoomProject(project)}
                       className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-bold text-white shadow-md transition"
@@ -223,7 +230,7 @@ export default function ProjectCollaborator({
                     {/* Chat Lead if not lead */}
                     {!isLead && (
                       <button
-                        onClick={() => onOpenChat({ id: project.leadId, name: project.leadName.replace(/\s*\(You\)/, ''), avatar: project.leadAvatar, year: 'Project Lead' })}
+                        onClick={() => onOpenChat({ id: project.leadId, name: cleanLeadName, avatar: project.leadAvatar, year: 'Project Lead' })}
                         className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-xs font-semibold text-purple-300 border border-slate-800 transition"
                       >
                         <MessageSquare className="h-3.5 w-3.5 text-purple-400" />
@@ -240,15 +247,17 @@ export default function ProjectCollaborator({
                       <Sparkles className="h-4 w-4 text-purple-400 animate-pulse" />
                     </div>
 
-                    {/* Delete Project Button (Only for Lead) */}
+                    {/* Delete Project Button (Strictly Only for Lead) */}
                     {isLead && onDeleteProject && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onDeleteProject(project.id);
+                          if (window.confirm(`Are you sure you want to delete "${project.title}"? This action cannot be undone.`)) {
+                            onDeleteProject(project.id);
+                          }
                         }}
                         className="p-2 bg-red-950/40 hover:bg-red-900/60 text-red-300 rounded-xl border border-red-500/30 transition hover:scale-105"
-                        title="Delete Project Listing"
+                        title="Delete Project (Project Lead Only)"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

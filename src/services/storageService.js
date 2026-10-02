@@ -670,11 +670,12 @@ export const storageService = {
       if (!projErr && cloudProjects) {
         const cloudProjectsMap = {};
         cloudProjects.forEach(p => {
+          const rawOwner = (p.owner || (usersMap[p.user_id] ? usersMap[p.user_id].name : 'Project Lead')).replace(/\s*\(You\)/gi, '').trim();
           cloudProjectsMap[p.id] = {
             id: p.id,
             leadId: p.user_id,
-            leadName: p.owner || (usersMap[p.user_id] ? usersMap[p.user_id].name : 'Project Lead'),
-            leadAvatar: (usersMap[p.user_id] ? usersMap[p.user_id].avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(p.owner || 'lead')}`),
+            leadName: rawOwner,
+            leadAvatar: (usersMap[p.user_id] ? usersMap[p.user_id].avatar : `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(rawOwner || 'lead')}`),
             title: p.title,
             category: p.category || 'Full-Stack',
             description: p.description || '',
@@ -690,7 +691,7 @@ export const storageService = {
           const payload = missingProjInCloud.map(p => ({
             id: p.id,
             user_id: p.leadId || 'usr-lead',
-            owner: p.leadName,
+            owner: (p.leadName || 'Project Lead').replace(/\s*\(You\)/gi, '').trim(),
             title: p.title,
             category: p.category,
             description: p.description,

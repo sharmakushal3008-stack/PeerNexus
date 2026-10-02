@@ -546,7 +546,10 @@ export default function App() {
               currentUser={currentUser}
               tradeRequests={tradeRequests}
               skillOffers={skillOffers}
-              userProjects={projects.filter(p => p.leadId === currentUser.id || (p.leadName && p.leadName.includes(currentUser.name)))}
+              userProjects={projects.filter(p => {
+                const cleanLead = (p.leadName || '').replace(/\s*\(You\)/gi, '').trim();
+                return (p.leadId && currentUser && p.leadId === currentUser.id) || (currentUser?.name && cleanLead.toLowerCase() === currentUser.name.toLowerCase());
+              })}
               onEditProfile={() => setIsEditProfileOpen(true)}
               onResetData={handleWipeData}
               onAcceptTradeRequest={handleAcceptTradeRequest}
