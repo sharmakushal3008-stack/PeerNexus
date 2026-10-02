@@ -476,7 +476,6 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         currentUser={currentUser}
-        onOpenAIAdvisor={() => setIsAIAdvisorOpen(true)}
         onOpenEditProfile={() => setIsEditProfileOpen(true)}
         onLogout={handleLogout}
       />
