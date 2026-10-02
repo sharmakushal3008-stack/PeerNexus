@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import TopDynamicNav from './components/TopDynamicNav';
-import CommandPaletteModal from './components/CommandPaletteModal';
+import SidebarNav from './components/SidebarNav';
+import HeaderBar from './components/HeaderBar';
 import SkillExchange from './components/SkillExchange';
 import ProjectCollaborator from './components/ProjectCollaborator';
 import MatchingEngine from './components/MatchingEngine';
@@ -18,7 +18,6 @@ import { storageService } from './services/storageService';
 export default function App() {
   const [activeTab, setActiveTab] = useState('skills');
   const [showAuth, setShowAuth] = useState(false);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   
   // Persistent Multi-User Shared Tables & Session State
   const [users, setUsers] = useState(() => storageService.getUsers());
@@ -72,27 +71,6 @@ export default function App() {
       setMessages(storageService.getMessages());
     });
     return unsubscribe;
-  }, []);
-
-  // Global Keyboard Shortcuts (Ctrl+K / ⌘K for Command Palette, ⌘1-5 for Direct Tabs)
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Toggle Command Palette with Ctrl+K or ⌘K
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
-      }
-      
-      // Quick Tab Switching with ⌘1 - ⌘5 / Ctrl+1 - Ctrl+5
-      if ((e.metaKey || e.ctrlKey) && ['1', '2', '3', '4', '5'].includes(e.key)) {
-        e.preventDefault();
-        const tabMap = { '1': 'skills', '2': 'projects', '3': 'matching', '4': 'resources', '5': 'profile' };
-        if (tabMap[e.key]) setActiveTab(tabMap[e.key]);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Sync to storage on local state change
@@ -491,106 +469,101 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#070a13] text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950 flex flex-col relative overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 flex text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950">
       
-      {/* Background Ambient Glowing Orbs */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[140px]" />
-        <div className="absolute top-[30%] right-[10%] w-[450px] h-[450px] bg-cyan-600/10 rounded-full blur-[130px]" />
-        <div className="absolute bottom-[-10%] left-[40%] w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[160px]" />
-      </div>
-
-      {/* Floating Dynamic Island Navigation Dock */}
-      <TopDynamicNav
+      {/* Sidebar Navigation */}
+      <SidebarNav
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         currentUser={currentUser}
         onOpenAIAdvisor={() => setIsAIAdvisorOpen(true)}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenEditProfile={() => setIsEditProfileOpen(true)}
         onLogout={handleLogout}
-        notifications={userNotifications}
-        onNotificationClick={handleNotificationClick}
-        onClearNotification={handleDismissNotification}
-        onClearAllNotifications={handleClearAllNotifications}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-20 relative z-10 space-y-6">
+      <div className="flex-1 flex flex-col min-w-0">
         
-        {activeTab === 'skills' && (
-          <SkillExchange
-            skillOffers={skillOffers}
-            currentUser={currentUser}
-            onTradeRequest={handleTradeRequest}
-            onAddNewSkillOffer={handleAddNewSkillOffer}
-            onDeleteSkillOffer={handleDeleteSkillOffer}
-            onOpenChat={(recipient) => setChatRecipient(recipient)}
-          />
-        )}
+        {/* Top Header Bar */}
+        <HeaderBar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          currentUser={currentUser}
+          onOpenAIAdvisor={() => setIsAIAdvisorOpen(true)}
+          onLogout={handleLogout}
+          notifications={userNotifications}
+          onNotificationClick={handleNotificationClick}
+          onClearNotification={handleDismissNotification}
+          onClearAllNotifications={handleClearAllNotifications}
+        />
 
-        {activeTab === 'projects' && (
-          <ProjectCollaborator
-            projects={projects}
-            currentUser={currentUser}
-            onApplyToRole={handleApplyToRole}
-            onAddNewProject={handleAddNewProject}
-            onDeleteProject={handleDeleteProject}
-            onOpenChat={(recipient) => setChatRecipient(recipient)}
-            onAcceptApplicant={handleAcceptApplicant}
-            onRejectApplicant={handleRejectApplicant}
-            onSendMessage={handleSendMessage}
-            messages={messages}
-          />
-        )}
+        {/* View Content */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+          
+          {activeTab === 'skills' && (
+            <SkillExchange
+              skillOffers={skillOffers}
+              currentUser={currentUser}
+              onTradeRequest={handleTradeRequest}
+              onAddNewSkillOffer={handleAddNewSkillOffer}
+              onDeleteSkillOffer={handleDeleteSkillOffer}
+              onOpenChat={(recipient) => setChatRecipient(recipient)}
+            />
+          )}
 
-        {activeTab === 'matching' && (
-          <MatchingEngine
-            currentUser={currentUser}
-            skillOffers={skillOffers}
-          />
-        )}
+          {activeTab === 'projects' && (
+            <ProjectCollaborator
+              projects={projects}
+              currentUser={currentUser}
+              onApplyToRole={handleApplyToRole}
+              onAddNewProject={handleAddNewProject}
+              onDeleteProject={handleDeleteProject}
+              onOpenChat={(recipient) => setChatRecipient(recipient)}
+              onAcceptApplicant={handleAcceptApplicant}
+              onRejectApplicant={handleRejectApplicant}
+              onSendMessage={handleSendMessage}
+              messages={messages}
+            />
+          )}
 
-        {activeTab === 'resources' && (
-          <ResourceBooking
-            resources={storageService.getResources()}
-            workshops={storageService.getWorkshops()}
-            onBookResource={(r, slot) => showToast(`Reserved ${r.name} for ${slot}!`)}
-            onRegisterWorkshop={(w) => showToast(`Registered for "${w.title}"!`)}
-          />
-        )}
+          {activeTab === 'matching' && (
+            <MatchingEngine
+              currentUser={currentUser}
+              skillOffers={skillOffers}
+            />
+          )}
 
-        {activeTab === 'profile' && (
-          <ProfileDashboard
-            currentUser={currentUser}
-            tradeRequests={tradeRequests}
-            skillOffers={skillOffers}
-            userProjects={projects.filter(p => {
-              const cleanLead = (p.leadName || '').replace(/\s*\(You\)/gi, '').trim();
-              return (p.leadId && currentUser && p.leadId === currentUser.id) || (currentUser?.name && cleanLead.toLowerCase() === currentUser.name.toLowerCase());
-            })}
-            onEditProfile={() => setIsEditProfileOpen(true)}
-            onResetData={handleWipeData}
-            onAcceptTradeRequest={handleAcceptTradeRequest}
-            onDeclineTradeRequest={handleDeclineTradeRequest}
-            onCompleteTrade={handleCompleteTrade}
-            onOpenSessionRoom={(tradeObj) => setActiveSessionTrade(tradeObj)}
-            onOpenChat={(recipient) => setChatRecipient(recipient)}
-            onDeleteSkillOffer={handleDeleteSkillOffer}
-          />
-        )}
+          {activeTab === 'resources' && (
+            <ResourceBooking
+              resources={storageService.getResources()}
+              workshops={storageService.getWorkshops()}
+              onBookResource={(r, slot) => showToast(`Reserved ${r.name} for ${slot}!`)}
+              onRegisterWorkshop={(w) => showToast(`Registered for "${w.title}"!`)}
+            />
+          )}
 
-      </main>
+          {activeTab === 'profile' && (
+            <ProfileDashboard
+              currentUser={currentUser}
+              tradeRequests={tradeRequests}
+              skillOffers={skillOffers}
+              userProjects={projects.filter(p => {
+                const cleanLead = (p.leadName || '').replace(/\s*\(You\)/gi, '').trim();
+                return (p.leadId && currentUser && p.leadId === currentUser.id) || (currentUser?.name && cleanLead.toLowerCase() === currentUser.name.toLowerCase());
+              })}
+              onEditProfile={() => setIsEditProfileOpen(true)}
+              onResetData={handleWipeData}
+              onAcceptTradeRequest={handleAcceptTradeRequest}
+              onDeclineTradeRequest={handleDeclineTradeRequest}
+              onCompleteTrade={handleCompleteTrade}
+              onOpenSessionRoom={(tradeObj) => setActiveSessionTrade(tradeObj)}
+              onOpenChat={(recipient) => setChatRecipient(recipient)}
+              onDeleteSkillOffer={handleDeleteSkillOffer}
+            />
+          )}
 
-      {/* Global Raycast / Linear Command Palette HUD */}
-      <CommandPaletteModal
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        setActiveTab={setActiveTab}
-        onOpenAIAdvisor={() => setIsAIAdvisorOpen(true)}
-        onLogout={handleLogout}
-        users={users}
-        onOpenChat={(recipient) => setChatRecipient(recipient)}
-      />
+        </main>
+      </div>
 
       {/* Edit Profile Modal */}
       <EditProfileModal
